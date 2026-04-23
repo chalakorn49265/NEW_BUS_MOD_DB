@@ -3,12 +3,17 @@
 from __future__ import annotations
 
 import sys
-from typing import Union
 from pathlib import Path
+from typing import Union
 
 _ROOT = Path(__file__).resolve().parent
-if str(_ROOT) not in sys.path:
-    sys.path.insert(0, str(_ROOT))
+sys.path.insert(0, str(_ROOT))
+_pkg = _ROOT / "emc_institutional_model" / "__init__.py"
+if not _pkg.is_file():
+    raise RuntimeError(
+        f"Missing model package (expected {_pkg}). "
+        "Commit and push the emc_institutional_model folder to GitHub."
+    )
 
 from datetime import date
 
@@ -415,7 +420,7 @@ def main() -> None:
             title="Cumulative net cashflow (USD) — equipment CAPEX basis",
         )
         fig.update_layout(template="plotly_white", font_color=NAVY, height=420)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
         if run_mc:
             mc = run_monte_carlo(p, MonteCarloConfig(n_paths=int(mc_n), seed=int(mc_seed)))
             fan = fan_chart_quantiles(mc.monthly_net_panel)
@@ -445,7 +450,7 @@ def main() -> None:
                 )
             )
             fig2.update_layout(template="plotly_white", title="Monthly net cashflow vs MC band", height=420)
-            st.plotly_chart(fig2, use_container_width=True)
+            st.plotly_chart(fig2, width="stretch")
 
     with tab_wf:
         cadence = st.radio("Period", ["Monthly", "Annual"], horizontal=True)
@@ -468,7 +473,7 @@ def main() -> None:
         )
         figw = _sources_uses_figure(df_plot, cum_col, net_col, pb_x, x_title, cum_sub)
         figw.update_layout(title=dict(text="Sources & Uses + cumulative net (EMC)", font=dict(color=NAVY)))
-        st.plotly_chart(figw, use_container_width=True)
+        st.plotly_chart(figw, width="stretch")
         if isinstance(pb_m, str):
             st.caption("No payback in horizon under the selected cumulative definition.")
         else:
@@ -505,7 +510,7 @@ def main() -> None:
             xaxis_title="Δ NPV (USD)",
             height=400,
         )
-        st.plotly_chart(figt, use_container_width=True)
+        st.plotly_chart(figt, width="stretch")
 
     with tab_tco:
         ai_capex = float(k["est_capex_usd"])
@@ -525,7 +530,7 @@ def main() -> None:
         figb.add_trace(go.Bar(name="AI", x=bridge["label"], y=bridge["AI"], marker_color=NAVY))
         figb.add_trace(go.Bar(name="Traditional", x=bridge["label"], y=bridge["Traditional"], marker_color="#94A3B8"))
         figb.update_layout(barmode="group", template="plotly_white", title="Annualised cost/revenue snapshot (yr1 style)", height=440)
-        st.plotly_chart(figb, use_container_width=True)
+        st.plotly_chart(figb, width="stretch")
         st.caption("Negative revenue bars represent inflows (cash convention).")
 
     with tab_opex:
@@ -534,7 +539,7 @@ def main() -> None:
         figo.add_trace(go.Bar(x=om["month_index"], y=-om["electrical_fee"], name="Electrical (outflow)"))
         figo.add_trace(go.Bar(x=om["month_index"], y=-om["maintenance_fee"], name="Maintenance (outflow)"))
         figo.update_layout(barmode="stack", template="plotly_white", title="OPEX composition (first 60 months)", height=400)
-        st.plotly_chart(figo, use_container_width=True)
+        st.plotly_chart(figo, width="stretch")
 
     with tab_tou:
         g = p.tariff_model.gov_payment
@@ -543,11 +548,11 @@ def main() -> None:
         )
         figq = px.bar(dfw, x="bucket", y="load_weight", title="Load allocation by TOU bucket", color_discrete_sequence=[ACCENT])
         figq.update_layout(template="plotly_white", height=360)
-        st.plotly_chart(figq, use_container_width=True)
+        st.plotly_chart(figq, width="stretch")
         figp = px.line(dfw, x="bucket", y="gov_USD_per_kWh", markers=True, title="Contract price by bucket")
         figp.update_traces(line_color=NAVY)
         figp.update_layout(template="plotly_white", height=320)
-        st.plotly_chart(figp, use_container_width=True)
+        st.plotly_chart(figp, width="stretch")
 
     with tab_mc:
         if not run_mc:
@@ -557,12 +562,12 @@ def main() -> None:
             c1, c2 = st.columns(2)
             figh1 = px.histogram(mc.npv_samples, nbins=40, title="NPV distribution", color_discrete_sequence=[NAVY])
             figh1.update_layout(template="plotly_white")
-            c1.plotly_chart(figh1, use_container_width=True)
+            c1.plotly_chart(figh1, width="stretch")
             irr_ok = mc.irr_samples[np.isfinite(mc.irr_samples)]
             figh2 = px.histogram(irr_ok, nbins=40, title="IRR distribution (annual)", color_discrete_sequence=[ACCENT])
             figh2.update_layout(template="plotly_white")
-            c2.plotly_chart(figh2, use_container_width=True)
-            st.dataframe(mc.summary(), use_container_width=True)
+            c2.plotly_chart(figh2, width="stretch")
+            st.dataframe(mc.summary(), width="stretch")
 
 
 if __name__ == "__main__":
