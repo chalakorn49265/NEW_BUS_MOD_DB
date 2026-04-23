@@ -20,10 +20,12 @@ TIER_DEFAULTS: dict[str, tuple[float, float, float, float, float]] = {
 
 # product_type -> (is_grid, req_ug, has_batt, fixture, trench, cable, labor, logistics,
 #                  routine_maint, batt_cost, batt_cycle, delivered_f, baseline_f)
+# delivered_f / baseline_f are grid-kWh-style factors; implied savings = 1 - delivered_f/baseline_f.
+# Off-grid solar: no grid purchases → delivered_f = 0 → 100% implied savings vs grid baseline.
 PRODUCT_ROWS: dict[str, tuple[int, int, int, float, float, float, float, float, float, float, int, float, float]] = {
     "AI_lightning_grid": (1, 1, 0, 200, 60, 50, 45, 30, 1.20, 0, 0, 0.95, 2.30),
     "AI_battery_integrated_grid": (1, 1, 1, 230, 60, 50, 50, 32, 1.30, 40, 72, 0.85, 2.40),
-    "AI_plus_solar_offgrid": (0, 0, 1, 280, 0, 0, 50, 35, 1.00, 70, 72, 1.00, 2.60),
+    "AI_plus_solar_offgrid": (0, 0, 1, 280, 0, 0, 50, 35, 1.00, 70, 72, 0.0, 2.60),
 }
 
 # Traditional_Benchmark sheet B4:B14 order
