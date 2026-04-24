@@ -70,6 +70,7 @@ class LaaSResults:
     baseline_client_npv_cost_rmb: float
     laas_client_npv_cost_rmb: float
     guarantees_npv_value_rmb: float
+    average_client_payment_rmb_per_year: float
     min_client_savings_rmb_per_year: float
     min_provider_gross_profit_uplift_rmb_per_year: float
     payback_improvement_months: float
@@ -374,6 +375,11 @@ def evaluate_laas_scenario(
     # client_gap > 0 means client worse off after accounting for guarantee value.
     client_gap = float(laas_pv_cost - baseline_pv_cost - guarantees_pv)
     client_benefit_pass = client_gap <= 0.0 + 1e-6
+    average_client_payment = (
+        sum(float(client_pay.get(y)) for y in years) / len(years)
+        if years
+        else 0.0
+    )
 
     min_client_savings = min(float(baseline.revenue_rmb_y.get(y)) - float(client_pay.get(y)) for y in years) if years else 0.0
     min_provider_gp_uplift = min(
@@ -447,6 +453,7 @@ def evaluate_laas_scenario(
         baseline_client_npv_cost_rmb=float(baseline_pv_cost),
         laas_client_npv_cost_rmb=float(laas_pv_cost),
         guarantees_npv_value_rmb=float(guarantees_pv),
+        average_client_payment_rmb_per_year=float(average_client_payment),
         min_client_savings_rmb_per_year=float(min_client_savings),
         min_provider_gross_profit_uplift_rmb_per_year=float(min_provider_gp_uplift),
         payback_improvement_months=float(payback_improvement_months),

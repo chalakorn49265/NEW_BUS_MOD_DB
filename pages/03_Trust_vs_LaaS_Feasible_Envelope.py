@@ -26,9 +26,9 @@ from business_model_comparison.roadlight_data import load_roadlight_all  # noqa:
 from business_model_comparison.report import (  # noqa: E402
     baseline_summary_table,
     envelope_table,
-    laas_results_to_table,
     provenance_bundle,
     rank_recommended_offers,
+    simple_cashflow_comparison_table,
 )
 
 
@@ -166,7 +166,7 @@ def main() -> None:
 
             fig = px.scatter(
                 dfp,
-                x="annual_service_fee_rmb",
+                x="average_client_payment_rmb_per_year",
                 y="term_years",
                 color="client_gap_rmb",
                 symbol="layer",
@@ -174,6 +174,8 @@ def main() -> None:
                 color_continuous_scale="RdYlGn_r",
                 title="Provider-feasible offers (color = client_gap RMB; <=0 means client better off after guarantee value)",
                 hover_data=[
+                    "annual_service_fee_rmb",
+                    "average_client_payment_rmb_per_year",
                     "upfront_rmb",
                     "last_four_year_fee_reduction_rmb",
                     "ai_opex_reduction_pct",
@@ -187,7 +189,7 @@ def main() -> None:
                 template="plotly_white",
                 height=520,
                 font_color=NAVY,
-                xaxis_title="Annual service fee (RMB)",
+                xaxis_title="Average LaaS annual payment over term (RMB/year)",
                 yaxis_title="Term (years)",
             )
             st.plotly_chart(fig, use_container_width=True)
@@ -213,7 +215,8 @@ def main() -> None:
         else:
             st.markdown(
                 f"- **Term**: {int(best_row['term_years'])} years\n"
-                f"- **Annual service fee**: RMB {_money(float(best_row['annual_service_fee_rmb']))}\n"
+                f"- **Years 1-6 annual service fee**: RMB {_money(float(best_row['annual_service_fee_rmb']))}\n"
+                f"- **Average LaaS annual payment over term**: RMB {_money(float(best_row['average_client_payment_rmb_per_year']))}\n"
                 f"- **Last 4 years reduction**: RMB {_money(float(best_row['last_four_year_fee_reduction_rmb']))} / year\n"
                 f"- **Upfront**: RMB {_money(float(best_row['upfront_rmb']))}\n"
                 f"- **OPEX mode**: {best_row['opex_mode']}\n"
@@ -249,20 +252,20 @@ def main() -> None:
                 ),
             )
 
-            detail = laas_results_to_table(best, baseline)
+            detail = simple_cashflow_comparison_table(best, baseline)
             detail_operating = detail[detail["year"] > 0].copy()
             c1, c2 = st.columns(2)
             with c1:
                 fig1 = go.Figure()
-                fig1.add_trace(go.Bar(x=detail_operating["year"], y=detail_operating["baseline_trust_fee_rmb"], name="Baseline 托管费", marker_color="#94A3B8"))
+                fig1.add_trace(go.Bar(x=detail_operating["year"], y=detail_operating["trust_service_fee_rmb"], name="Baseline 托管费", marker_color="#94A3B8"))
                 fig1.add_trace(go.Bar(x=detail_operating["year"], y=detail_operating["laas_service_fee_rmb"], name="LaaS 服务费", marker_color=ACCENT))
                 fig1.update_layout(barmode="group", template="plotly_white", height=360, title="Client payment comparison (RMB/year)", font_color=NAVY)
                 st.plotly_chart(fig1, use_container_width=True)
             with c2:
                 fig2 = go.Figure()
-                fig2.add_trace(go.Bar(x=detail_operating["year"], y=detail_operating["baseline_gross_profit_rmb"], name="Baseline 年毛空间", marker_color="#94A3B8"))
-                fig2.add_trace(go.Bar(x=detail_operating["year"], y=detail_operating["laas_gross_profit_rmb"], name="LaaS 年毛空间", marker_color=GREEN))
-                fig2.update_layout(barmode="group", template="plotly_white", height=360, title="Provider accounting gross profit (RMB/year)", font_color=NAVY)
+                fig2.add_trace(go.Scatter(x=detail["year"], y=detail["trust_net_cashflow_cumulative_rmb"], name="能源托管 累计净现金流", mode="lines+markers", line=dict(color="#94A3B8", width=3)))
+                fig2.add_trace(go.Scatter(x=detail["year"], y=detail["laas_net_cashflow_cumulative_rmb"], name="LaaS 累计净现金流", mode="lines+markers", line=dict(color=GREEN, width=3)))
+                fig2.update_layout(template="plotly_white", height=360, title="Cumulative net cashflow (RMB)", font_color=NAVY)
                 st.plotly_chart(fig2, use_container_width=True)
 
             st.dataframe(detail, use_container_width=True)

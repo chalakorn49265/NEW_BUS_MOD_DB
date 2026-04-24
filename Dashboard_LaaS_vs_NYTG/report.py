@@ -10,16 +10,27 @@ from business_model_comparison.models import BaselineResults
 
 def baseline_summary_table(b: BaselineResults) -> pd.DataFrame:
     rows = []
+    cumulative = 0.0
+    year0_net = -float(b.capex_y0_rmb)
+    cumulative += year0_net
+    rows.append(
+        {
+            "year": 0,
+            "capex_rmb": float(b.capex_y0_rmb),
+            "service_fee_rmb": 0.0,
+            "upfront_rmb": 0.0,
+            "net_cashflow_cumulative_rmb": cumulative,
+        }
+    )
     for y in b.years:
+        cumulative += float(b.revenue_rmb_y.get(y)) - float(b.cash_opex_rmb_y.get(y))
         rows.append(
             {
                 "year": y,
-                "revenue_rmb": float(b.revenue_rmb_y.get(y)),
-                "cash_opex_rmb": float(b.cash_opex_rmb_y.get(y)),
-                "depreciation_rmb": float(b.depreciation_rmb_y.get(y)),
-                "accounting_gross_profit_rmb": float(b.accounting_gross_profit_rmb_y.get(y)),
-                "debt_service_rmb": float(b.debt_service_rmb_y.get(y)),
-                "dscr": (None if b.dscr.dscr_by_year.get(y) is None else float(b.dscr.dscr_by_year[y])),
+                "capex_rmb": 0.0,
+                "service_fee_rmb": float(b.revenue_rmb_y.get(y)),
+                "upfront_rmb": 0.0,
+                "net_cashflow_cumulative_rmb": cumulative,
             }
         )
     return pd.DataFrame(rows)
@@ -31,32 +42,61 @@ def laas_results_to_table(r: LaaSResults, baseline: BaselineResults) -> pd.DataF
     rows.append(
         {
             "year": 0,
+            "baseline_capex_rmb": float(baseline.capex_y0_rmb),
+            "laas_capex_rmb": float(baseline.capex_y0_rmb),
             "baseline_trust_fee_rmb": 0.0,
+            "provider_revenue_rmb": 0.0,
             "upfront_payment_rmb": float(r.scenario.upfront_rmb),
             "laas_service_fee_rmb": 0.0,
             "total_client_outflow_rmb": float(r.scenario.upfront_rmb),
             "client_savings_rmb": -float(r.scenario.upfront_rmb),
+            "baseline_cash_opex_rmb": 0.0,
+            "baseline_electricity_opex_rmb": 0.0,
+            "laas_cash_opex_rmb": 0.0,
+            "baseline_depreciation_rmb": 0.0,
+            "laas_depreciation_rmb": 0.0,
             "baseline_gross_profit_rmb": 0.0,
             "laas_gross_profit_rmb": 0.0,
             "gross_profit_uplift_rmb": 0.0,
+            "baseline_project_cashflow_rmb": -float(baseline.capex_y0_rmb),
+            "laas_project_cashflow_rmb": -float(baseline.capex_y0_rmb) + float(r.scenario.upfront_rmb),
+            "debt_principal_rmb": 0.0,
+            "debt_interest_rmb": 0.0,
             "debt_service_rmb": 0.0,
             "dscr": None,
         }
     )
     for y in years:
         laas_fee = float(r.client_payment_rmb_y.get(y))
+        provider_revenue = float(r.provider_revenue_rmb_y.get(y))
+        laas_cash_opex = float(r.provider_cash_opex_rmb_y.get(y))
+        laas_depreciation = float(r.provider_depreciation_rmb_y.get(y))
+        baseline_revenue = float(baseline.revenue_rmb_y.get(y))
+        baseline_cash_opex = float(baseline.cash_opex_rmb_y.get(y))
         rows.append(
             {
                 "year": y,
-                "baseline_trust_fee_rmb": float(baseline.revenue_rmb_y.get(y)),
+                "baseline_capex_rmb": 0.0,
+                "laas_capex_rmb": 0.0,
+                "baseline_trust_fee_rmb": baseline_revenue,
+                "provider_revenue_rmb": provider_revenue,
                 "upfront_payment_rmb": 0.0,
                 "laas_service_fee_rmb": laas_fee,
                 "total_client_outflow_rmb": laas_fee,
-                "client_savings_rmb": float(baseline.revenue_rmb_y.get(y)) - laas_fee,
+                "client_savings_rmb": baseline_revenue - laas_fee,
+                "baseline_cash_opex_rmb": baseline_cash_opex,
+                "baseline_electricity_opex_rmb": float(baseline.electricity_opex_rmb_y.get(y)),
+                "laas_cash_opex_rmb": laas_cash_opex,
+                "baseline_depreciation_rmb": float(baseline.depreciation_rmb_y.get(y)),
+                "laas_depreciation_rmb": laas_depreciation,
                 "baseline_gross_profit_rmb": float(baseline.accounting_gross_profit_rmb_y.get(y)),
                 "laas_gross_profit_rmb": float(r.provider_accounting_gross_profit_rmb_y.get(y)),
                 "gross_profit_uplift_rmb": float(r.provider_accounting_gross_profit_rmb_y.get(y))
                 - float(baseline.accounting_gross_profit_rmb_y.get(y)),
+                "baseline_project_cashflow_rmb": baseline_revenue - baseline_cash_opex,
+                "laas_project_cashflow_rmb": provider_revenue - laas_cash_opex,
+                "debt_principal_rmb": float(baseline.debt_principal_rmb_y.get(y)),
+                "debt_interest_rmb": float(baseline.debt_interest_rmb_y.get(y)),
                 "debt_service_rmb": float(r.debt_service_rmb_y.get(y)),
                 "dscr": (None if r.dscr.dscr_by_year.get(y) is None else float(r.dscr.dscr_by_year[y])),
             }
@@ -90,10 +130,55 @@ def envelope_table(env: FeasibleEnvelope) -> pd.DataFrame:
                 "baseline_client_npv_cost_rmb": float(r.baseline_client_npv_cost_rmb),
                 "laas_client_npv_cost_rmb": float(r.laas_client_npv_cost_rmb),
                 "guarantees_npv_value_rmb": float(r.guarantees_npv_value_rmb),
+                "average_client_payment_rmb_per_year": float(r.average_client_payment_rmb_per_year),
                 "min_client_savings_rmb_per_year": float(r.min_client_savings_rmb_per_year),
                 "min_provider_gross_profit_uplift_rmb_per_year": float(r.min_provider_gross_profit_uplift_rmb_per_year),
                 "payback_improvement_months": float(r.payback_improvement_months),
                 "feasible_everyone_better_off": bool(r.feasible_everyone_better_off),
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def simple_cashflow_comparison_table(r: LaaSResults, baseline: BaselineResults) -> pd.DataFrame:
+    rows = []
+    baseline_cum = 0.0
+    laas_cum = 0.0
+
+    baseline_y0 = -float(baseline.capex_y0_rmb)
+    laas_y0 = -float(baseline.capex_y0_rmb) + float(r.scenario.upfront_rmb)
+    baseline_cum += baseline_y0
+    laas_cum += laas_y0
+    rows.append(
+        {
+            "year": 0,
+            "trust_capex_rmb": float(baseline.capex_y0_rmb),
+            "trust_service_fee_rmb": 0.0,
+            "trust_upfront_rmb": 0.0,
+            "trust_net_cashflow_cumulative_rmb": baseline_cum,
+            "laas_capex_rmb": float(baseline.capex_y0_rmb),
+            "laas_service_fee_rmb": 0.0,
+            "laas_upfront_rmb": float(r.scenario.upfront_rmb),
+            "laas_net_cashflow_cumulative_rmb": laas_cum,
+        }
+    )
+
+    for y in baseline.years:
+        baseline_net = float(baseline.revenue_rmb_y.get(y)) - float(baseline.cash_opex_rmb_y.get(y))
+        laas_net = float(r.provider_revenue_rmb_y.get(y)) - float(r.provider_cash_opex_rmb_y.get(y))
+        baseline_cum += baseline_net
+        laas_cum += laas_net
+        rows.append(
+            {
+                "year": int(y),
+                "trust_capex_rmb": 0.0,
+                "trust_service_fee_rmb": float(baseline.revenue_rmb_y.get(y)),
+                "trust_upfront_rmb": 0.0,
+                "trust_net_cashflow_cumulative_rmb": baseline_cum,
+                "laas_capex_rmb": 0.0,
+                "laas_service_fee_rmb": float(r.client_payment_rmb_y.get(y)),
+                "laas_upfront_rmb": 0.0,
+                "laas_net_cashflow_cumulative_rmb": laas_cum,
             }
         )
     return pd.DataFrame(rows)
