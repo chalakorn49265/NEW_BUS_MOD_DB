@@ -20,14 +20,14 @@ The Streamlit pages are thin UIs over this module:
 ### Types and inputs
 
 - `SolveFor`: allowed solve knobs
-  - `"annual_fee_usd"`, `"upfront_usd"`, `"provider_opex_annual_usd"`, `"term_years"`
+  - `"annual_fee_usd"`, `"upfront_usd"`, `"term_years"`
 - `ProviderLaaSInputs`
   - `capex_usd` (fixed at 3,000,000 in UI)
   - `term_years`
   - `annual_fee_usd`
   - `upfront_usd`
   - `escalation_pct_annual`
-  - `provider_opex_annual_usd`
+  - `provider_opex_annual_usd` (still exists in the math model; the Streamlit provider page currently fixes this at **0** and does not expose it as a solve-for knob)
 - `CustomerBaselineInputs`
   - `term_years`
   - `baseline_energy_annual_usd`
@@ -85,7 +85,8 @@ Produced by `provider_cashflows_monthly(i: ProviderLaaSInputs)`:
 
 Notes:
 
-- Escalation is applied to both fee and opex to keep the model minimal and explainable.
+- Escalation is applied to fee and (if non-zero) provider opex using the same escalation parameter (minimal coupling).
+- In the current Streamlit provider UI, provider opex is fixed at **0**, so operationally only the fee escalates.
 - If you need separate escalation paths, add new fields rather than overloading one.
 
 ### Customer perspective incremental cashflows (baseline-cost stream)
@@ -152,7 +153,7 @@ Given a target annual IRR \(r\), define monthly discount \(r_m\) and solve:
 \text{NPV}(r, \text{cashflows}(x)) = 0
 \]
 
-Where \(x\) is the selected “solve-for” knob (fee, upfront, opex, term).
+Where \(x\) is the selected “solve-for” knob (fee, upfront, term).
 
 Implementation detail:
 
@@ -165,7 +166,6 @@ For solve-for knobs:
 
 - `annual_fee_usd`
 - `upfront_usd`
-- `provider_opex_annual_usd` (provider page only)
 
 We define an objective `obj(x)` = NPV at target discount of the cashflows built with `x`, and apply:
 
@@ -217,7 +217,7 @@ Keep cashflow sign conventions explicit:
 ## Known limitations (intentional)
 
 - No debt, taxes, depreciation, working capital, or terminal value.
-- Escalation is simplified; provider fee and provider opex share the same escalation parameter.
+- Escalation is simplified; provider fee and provider opex share the same escalation parameter (opex is typically **0** in the Streamlit provider UI).
 - Customer page uses baseline-cost stream only (not “savings-only” mode).
 - `term_years` solve is discrete best-fit, not root-finding.
 

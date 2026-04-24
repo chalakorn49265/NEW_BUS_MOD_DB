@@ -4,7 +4,9 @@ This guide is written for **Quant/Strategy** to enable **Sales** to confidently 
 
 - **`LaaS IRR Target — Provider / Project`** (`pages/01_LaaS_Provider_IRR.py`)
 
-The provider page answers: **“If we need X% project IRR, what contract terms (fee/upfront/term/OPEX) make that achievable, given CAPEX is fixed?”**
+The provider page answers: **“If we need X% project IRR, what contract terms (fee/upfront/term) make that achievable, given CAPEX is fixed?”**
+
+Note: the Streamlit provider UI currently holds **`provider_opex_annual_usd` fixed at 0** (OPEX is not exposed as an adjustable/solve-for knob) to avoid unphysical “negative OPEX subsidy” artifacts when targeting high IRRs.
 
 ## How to launch
 
@@ -55,7 +57,7 @@ This is implemented as a **bisection solve** on NPV, which is robust and monoton
 
 ### Why “Solve-for” is single-parameter
 
-The product requirement says “everything can be adjusted except CAPEX,” but that yields infinitely many combinations. So the UI forces a single solve-for knob (fee/upfront/OPEX/term) to keep the result explainable and repeatable.
+The product requirement says “everything can be adjusted except CAPEX,” but that yields infinitely many combinations. So the UI forces a single solve-for knob (fee/upfront/term) to keep the result explainable and repeatable.
 
 ## Sales talk track (recommended)
 
@@ -67,13 +69,12 @@ The product requirement says “everything can be adjusted except CAPEX,” but 
 
 - **`annual_fee_usd`**: best for “budget-fit” conversations (default starts at **$600k/year**)
 - **`upfront_usd`**: best if the customer can prepay part of deployment
-- **`provider_opex_annual_usd`**: best for internal sensitivity (“what OPEX envelope is allowed?”)
 - **`term_years`**: best for structuring (“what term makes the math work?”)
 
 ### 3) Read the KPIs
 
 - **Achieved IRR (annual)**: should match the target once solved
-- **Solved value**: the fee/upfront/OPEX/term required to hit the IRR
+- **Solved value**: the fee/upfront/term required to hit the IRR
 - **NPV @ target IRR (USD)**: near **0** when solved (numerical tolerance)
 - **Payback (months)**: first month when cumulative net cashflow ≥ 0
 
@@ -96,7 +97,7 @@ What to do:
 
 - Increase the **upper bound** for fee or upfront (if solving for those)
 - Increase the **term** (if not the solve-for) to allow longer recovery
-- Reduce OPEX (or set a more realistic OPEX)
+- If the target IRR is infeasible at the current fee/upfront/term, adjust **fee/upfront/term/target** (not OPEX in the UI)
 
 ### Discrete `term_years` solve-for
 

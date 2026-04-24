@@ -67,7 +67,7 @@ def main() -> None:
     st.markdown(
         f"<h2 style='color:{NAVY};margin-bottom:0.2rem;'>LaaS IRR Target — Provider / Project</h2>"
         f"<p style='color:{MUTED};margin-top:0;'>Set a target provider IRR and the model solves a selected parameter "
-        f"(CAPEX fixed at $3.0M).</p>",
+        f"(annual fee, upfront, or term). CAPEX is fixed at $3.0M and provider OPEX is fixed at $0 in this view.</p>",
         unsafe_allow_html=True,
     )
 
@@ -76,7 +76,7 @@ def main() -> None:
         target_irr = st.slider("Target IRR (annual)", -0.20, 0.80, 0.18, 0.005)
         solve_for = st.selectbox(
             "Solve-for parameter",
-            ["annual_fee_usd", "upfront_usd", "provider_opex_annual_usd", "term_years"],
+            ["annual_fee_usd", "upfront_usd", "term_years"],
             index=0,
             help="To avoid infinite solutions, the solver adjusts ONLY this one knob to hit the target IRR.",
         )
@@ -91,7 +91,6 @@ def main() -> None:
         annual_fee = st.number_input("Annual customer fee (USD/year)", min_value=0.0, value=600_000.0, step=50_000.0)
         upfront = st.number_input("Upfront payment (USD, received at month 0)", value=0.0, step=50_000.0)
         esc = st.slider("Escalation (annual %)", -0.05, 0.20, 0.03, 0.005)
-        opex = st.number_input("Provider OPEX (USD/year)", min_value=0.0, value=0.0, step=25_000.0)
 
         st.divider()
         st.subheader("Solver bounds")
@@ -104,7 +103,7 @@ def main() -> None:
         annual_fee_usd=float(annual_fee),
         upfront_usd=float(upfront),
         escalation_pct_annual=float(esc),
-        provider_opex_annual_usd=float(opex),
+        provider_opex_annual_usd=0.0,
     )
 
     solved = None
@@ -148,7 +147,7 @@ def main() -> None:
     elif solve_for == "upfront_usd":
         k4.metric("Solved upfront (USD)", f"{solved.upfront_usd:,.0f}")
     else:
-        k4.metric("Solved provider OPEX (USD/yr)", f"{solved.provider_opex_annual_usd:,.0f}")
+        k4.metric("Solved parameter", str(solve_for))
 
     c1, c2 = st.columns([1.3, 1.0])
     with c1:

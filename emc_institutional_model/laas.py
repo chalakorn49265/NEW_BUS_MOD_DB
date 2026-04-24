@@ -7,7 +7,7 @@ import numpy as np
 import numpy_financial as npf
 
 
-SolveFor = Literal["annual_fee_usd", "upfront_usd", "provider_opex_annual_usd", "term_years"]
+SolveFor = Literal["annual_fee_usd", "upfront_usd", "term_years"]
 
 
 def monthly_rate_from_annual(r_annual: float) -> float:
@@ -187,8 +187,6 @@ def solve_provider_for_target_irr(
             return ProviderLaaSInputs(**{**base.__dict__, "annual_fee_usd": float(x)})
         if solve_for == "upfront_usd":
             return ProviderLaaSInputs(**{**base.__dict__, "upfront_usd": float(x)})
-        if solve_for == "provider_opex_annual_usd":
-            return ProviderLaaSInputs(**{**base.__dict__, "provider_opex_annual_usd": float(x)})
         raise SolveError(f"Unknown solve_for: {solve_for}")
 
     def obj(x: float) -> float:
@@ -234,8 +232,6 @@ def solve_customer_for_target_irr(
             return CustomerLaaSInputs(**{**laas.__dict__, "annual_fee_usd": float(x)})
         if solve_for == "upfront_usd":
             return CustomerLaaSInputs(**{**laas.__dict__, "upfront_usd": float(x)})
-        if solve_for == "provider_opex_annual_usd":
-            raise SolveError("provider_opex_annual_usd is not a customer-side knob in this perspective.")
         raise SolveError(f"Unknown solve_for: {solve_for}")
 
     def obj(x: float) -> float:
