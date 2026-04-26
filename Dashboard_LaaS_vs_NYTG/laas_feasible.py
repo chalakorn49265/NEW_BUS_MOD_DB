@@ -5,6 +5,12 @@ from typing import Literal
 
 import numpy as np
 
+from Dashboard_LaaS_vs_NYTG.product_profiles import (
+    ProductKey,
+    forces_grid_electricity_zero,
+    provenance_note as product_provenance_note,
+    routine_om_scale,
+)
 from business_model_comparison.metrics import (
     DebtMetrics,
     compute_dscr_by_year,
@@ -27,6 +33,7 @@ class LaaSScenario:
     ai_opex_reduction_pct: float  # fraction in [0, 1] (used when mode uses pct)
     last_four_year_fee_reduction_rmb: float = 0.0  # applied only in years 7-10; capped by floor
     opex_mode: Literal["uniform_pct", "electricity_only_pct", "ai_plus_solar"] = "uniform_pct"
+    product_key: ProductKey = "AI_lightning_grid"
 
 
 @dataclass(frozen=True)
@@ -222,6 +229,118 @@ def _apply_opex_mode(
     return cash
 
 
+def _apply_opex_mode_split(
+    *,
+    baseline_cash_opex: SeriesWithProv,
+    baseline_electricity_opex: SeriesWithProv,
+    mode: Literal["uniform_pct", "electricity_only_pct", "ai_plus_solar"],
+    reduction_pct: float,
+) -> tuple[SeriesWithProv, SeriesWithProv, SeriesWithProv]:
+    """
+    Return (other_cash_opex, electricity_opex, total_cash_opex) after applying `mode`.
+
+    This is used so product overlays (solar/battery) can be applied cleanly.
+    """
+    years = sorted(set(baseline_cash_opex.values_by_year.keys()) | set(baseline_electricity_opex.values_by_year.keys()))
+    cash = baseline_cash_opex.reindex_years(years)
+    elec = baseline_electricity_opex.reindex_years(years)
+    other = SeriesWithProv(
+        values_by_year={y: float(cash.get(y)) - float(elec.get(y)) for y in years},
+        provenance=Provenance(
+            sources=(
+                *cash.provenance.sources,
+                *elec.provenance.sources,
+            ),
+            units=cash.provenance.units,
+            transform="other_cash_opex = total_cash_opex − electricity_opex.",
+        ),
+    )
+
+    if mode == "uniform_pct":
+        r = max(0.0, min(MAX_AI_OPEX_REDUCTION_PCT, float(reduction_pct)))
+        other_adj = SeriesWithProv(
+            values_by_year={y: float(other.get(y)) * (1.0 - r) for y in years},
+            provenance=Provenance(
+                sources=(
+                    *other.provenance.sources,
+                    SourceRef(file="ASSUMPTION/COMPUTED", row_label="opex_mode", notes="uniform_pct"),
+                    SourceRef(file="ASSUMPTION/COMPUTED", row_label="ai_opex_reduction_pct", notes=f"{r:.3f} applied to non-electric portion"),
+                ),
+                units=other.provenance.units,
+                transform=f"other_opex = other_cash_opex × (1 − {r:.3f}) under uniform_pct.",
+            ),
+        )
+        elec_adj = SeriesWithProv(
+            values_by_year={y: float(elec.get(y)) * (1.0 - r) for y in years},
+            provenance=Provenance(
+                sources=(
+                    *elec.provenance.sources,
+                    SourceRef(file="ASSUMPTION/COMPUTED", row_label="opex_mode", notes="uniform_pct"),
+                    SourceRef(file="ASSUMPTION/COMPUTED", row_label="ai_opex_reduction_pct", notes=f"{r:.3f} applied to electricity portion"),
+                ),
+                units=elec.provenance.units,
+                transform=f"electricity_opex = electricity_opex × (1 − {r:.3f}) under uniform_pct.",
+            ),
+        )
+        cash_adj = SeriesWithProv(
+            values_by_year={y: float(other_adj.get(y)) + float(elec_adj.get(y)) for y in years},
+            provenance=Provenance(
+                sources=(*other_adj.provenance.sources, *elec_adj.provenance.sources),
+                units=cash.provenance.units,
+                transform="cash_opex = other_opex + electricity_opex (uniform_pct split form).",
+            ),
+        )
+        return other_adj, elec_adj, cash_adj
+
+    if mode == "electricity_only_pct":
+        r = max(0.0, min(MAX_AI_OPEX_REDUCTION_PCT, float(reduction_pct)))
+        elec_adj = SeriesWithProv(
+            values_by_year={y: float(elec.get(y)) * (1.0 - r) for y in years},
+            provenance=Provenance(
+                sources=(
+                    *elec.provenance.sources,
+                    SourceRef(file="ASSUMPTION/COMPUTED", row_label="opex_mode", notes="electricity_only_pct"),
+                    SourceRef(file="ASSUMPTION/COMPUTED", row_label="ai_opex_reduction_pct", notes=f"{r:.3f} applied to electricity only"),
+                ),
+                units=elec.provenance.units,
+                transform=elec.provenance.transform + f" Then multiplied by (1 − {r:.3f}) under electricity_only_pct mode.",
+            ),
+        )
+        cash_adj = SeriesWithProv(
+            values_by_year={y: float(other.get(y)) + float(elec_adj.get(y)) for y in years},
+            provenance=Provenance(
+                sources=(*other.provenance.sources, *elec_adj.provenance.sources),
+                units=elec.provenance.units,
+                transform="cash_opex = other_cash_opex + adjusted_electricity_opex (electricity_only_pct).",
+            ),
+        )
+        return other, elec_adj, cash_adj
+
+    if mode == "ai_plus_solar":
+        elec_zero = SeriesWithProv(
+            values_by_year={y: 0.0 for y in years},
+            provenance=Provenance(
+                sources=(
+                    *elec.provenance.sources,
+                    SourceRef(file="ASSUMPTION/COMPUTED", row_label="opex_mode", notes="ai_plus_solar"),
+                    SourceRef(file="ASSUMPTION/COMPUTED", row_label="electricity_opex_rule", notes="Set electricity OPEX to 0 for all years; no solar CAPEX modeled."),
+                ),
+                units=elec.provenance.units,
+                transform="Electricity OPEX set to 0 for all years under ai_plus_solar mode (assumption; no solar CAPEX modeled).",
+            ),
+        )
+        cash_adj = SeriesWithProv(
+            values_by_year={y: float(other.get(y)) + float(elec_zero.get(y)) for y in years},
+            provenance=Provenance(
+                sources=(*other.provenance.sources, *elec_zero.provenance.sources),
+                units=elec.provenance.units,
+                transform="cash_opex = other_cash_opex + 0 electricity (ai_plus_solar).",
+            ),
+        )
+        return other, elec_zero, cash_adj
+
+    return other, elec, cash
+
 def _client_value_from_guarantees_by_year(
     years: list[int],
     a: ClientValueAssumptions,
@@ -308,12 +427,52 @@ def evaluate_laas_scenario(
         ),
     )
 
-    # Provider costs: baseline cash OPEX transformed via explicit OPEX mode (traceable).
-    cash_opex = _apply_opex_mode(
-        baseline_cash_opex=baseline.cash_opex_rmb_y.reindex_years(years),
-        baseline_electricity_opex=baseline.electricity_opex_rmb_y.reindex_years(years),
+    base_cash = baseline.cash_opex_rmb_y.reindex_years(years)
+    base_elec = baseline.electricity_opex_rmb_y.reindex_years(years)
+    other_mode, elec_mode, _cash_mode = _apply_opex_mode_split(
+        baseline_cash_opex=base_cash,
+        baseline_electricity_opex=base_elec,
         mode=scenario.opex_mode,
         reduction_pct=scenario.ai_opex_reduction_pct,
+    )
+
+    # Product overlay: solar forces electricity to zero; battery reduces routine (non-electric) OPEX.
+    if forces_grid_electricity_zero(scenario.product_key):
+        elec_adj = SeriesWithProv(
+            values_by_year={y: 0.0 for y in years},
+            provenance=Provenance(
+                sources=(
+                    *elec_mode.provenance.sources,
+                    SourceRef(file="ASSUMPTION/COMPUTED", row_label="product_key", notes=str(scenario.product_key)),
+                    SourceRef(file="ASSUMPTION/COMPUTED", row_label="electricity_opex_rule", notes="Off-grid solar product: electricity OPEX set to 0."),
+                ),
+                units=elec_mode.provenance.units,
+                transform="electricity_opex = 0 for all years due to off-grid solar product (no grid purchases).",
+            ),
+        )
+    else:
+        elec_adj = elec_mode
+
+    om_scale = routine_om_scale(scenario.product_key)
+    other_scaled = SeriesWithProv(
+        values_by_year={y: max(0.0, float(other_mode.get(y)) * om_scale) for y in years},
+        provenance=Provenance(
+            sources=(
+                *other_mode.provenance.sources,
+                SourceRef(file="ASSUMPTION/COMPUTED", row_label="product_key", notes=str(scenario.product_key)),
+                SourceRef(file="ASSUMPTION/COMPUTED", row_label="routine_om_scale", notes=f"{om_scale:.3f}; {product_provenance_note(scenario.product_key)}"),
+            ),
+            units=base_cash.provenance.units,
+            transform=f"non_electric_opex_scaled = max(0, other_opex_after_mode × {om_scale:.3f}) based on product routine_maint factor.",
+        ),
+    )
+    cash_opex = SeriesWithProv(
+        values_by_year={y: float(other_scaled.get(y)) + float(elec_adj.get(y)) for y in years},
+        provenance=Provenance(
+            sources=(*other_scaled.provenance.sources, *elec_adj.provenance.sources),
+            units=base_cash.provenance.units,
+            transform="cash_opex = non_electric_opex_scaled + electricity_opex (mode + product overlay).",
+        ),
     )
     depr = baseline.depreciation_rmb_y.reindex_years(years)  # accounting depreciation (kept same unless later refined)
 

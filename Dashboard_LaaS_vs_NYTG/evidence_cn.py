@@ -12,7 +12,13 @@ class EvidenceCard:
     notes: str = ""
 
 
-def cards_for_selected_tier(*, has_upfront: bool, has_tail_discount: bool, laas_saving_rate: float | None) -> list[EvidenceCard]:
+def cards_for_selected_tier(
+    *,
+    has_upfront: bool,
+    has_tail_discount: bool,
+    laas_saving_rate: float | None,
+    product_key: str | None = None,
+) -> list[EvidenceCard]:
     cards: list[EvidenceCard] = []
 
     cards.append(
@@ -33,6 +39,25 @@ def cards_for_selected_tier(*, has_upfront: bool, has_tail_discount: bool, laas_
             maps_to_cells=["02_Inputs!D22(人工/维修按灯)", "02_Inputs!D23(平台费)", "02_Inputs!D24(备件)", "05_Annual_Model!D61:M61(业主年度总支出)"],
         )
     )
+
+    if product_key:
+        cards.append(
+            EvidenceCard(
+                title="产品类型差异 → CAPEX/OPEX口径不同（可追溯到产品行参数）",
+                why=(
+                    f"本方案的产品类型为 `{product_key}`。不同产品在并网/离网、电池集成、施工（如沟槽/电缆）等配置不同，"
+                    "会影响一次性CAPEX与日常运维强度（例如应急出勤、例行维护）。"
+                ),
+                evidence_url="emc_institutional_model/defaults.py (PRODUCT_ROWS)",
+                maps_to_cells=[
+                    "02_Inputs!D48(product_key)",
+                    "02_Inputs!D28(LaaS CAPEX/盏)",
+                    "02_Inputs!D31(LaaS 节电率)",
+                    "02_Inputs!D22:D24(非电费运维拆解)",
+                ],
+                notes="产品差异映射逻辑在代码中实现，可按需替换为公司内部报价单/施工清单以增强证据强度。",
+            )
+        )
 
     if has_upfront:
         cards.append(

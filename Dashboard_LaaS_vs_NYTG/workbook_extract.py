@@ -158,6 +158,9 @@ class TierExtract:
     opex_platform: float | None  # 02_Inputs!D23
     opex_spares: float | None  # 02_Inputs!D24
 
+    # Product metadata
+    product_key: str | None  # 02_Inputs!D48
+
     # Provider cashflow lines (Y0..Y10) from 05_Annual_Model (labels in column A/B)
     provider_lines: dict[str, list[float | None]]
 
@@ -193,6 +196,7 @@ class TierExtract:
             "opex_om_per_lamp": self.opex_om_per_lamp,
             "opex_platform": self.opex_platform,
             "opex_spares": self.opex_spares,
+            "product_key": self.product_key,
             "provider_lines": self.provider_lines,
         }
 
@@ -242,6 +246,15 @@ def extract_one_workbook(xlsx_path: Path) -> TierExtract:
     opex_om_per_lamp = read_cached_cell(inp_xml, "D22")
     opex_platform = read_cached_cell(inp_xml, "D23")
     opex_spares = read_cached_cell(inp_xml, "D24")
+    # Product key is written as an inline string in the template (no cached numeric v). We read via openpyxl for this one cell.
+    try:
+        wb_meta = load_workbook(xlsx_path, data_only=True, read_only=True)
+        ws_meta = wb_meta["02_Inputs"]
+        pk = ws_meta["D48"].value
+        product_key = str(pk).strip() if pk is not None else None
+        wb_meta.close()
+    except Exception:
+        product_key = None
 
     # Provider cashflow block (mirror the workbook table you screenshot'ed)
     provider_labels = [
@@ -299,6 +312,7 @@ def extract_one_workbook(xlsx_path: Path) -> TierExtract:
         opex_om_per_lamp=opex_om_per_lamp,
         opex_platform=opex_platform,
         opex_spares=opex_spares,
+        product_key=product_key,
         provider_lines=provider_lines,
     )
 

@@ -18,6 +18,13 @@ from Dashboard_LaaS_vs_NYTG.tier_dashboard_data import (  # noqa: E402
     tier_traceability_dict,
 )
 from Dashboard_LaaS_vs_NYTG.evidence_cn import cards_for_selected_tier  # noqa: E402
+from Dashboard_LaaS_vs_NYTG.product_profiles import (  # noqa: E402
+    ProductKey,
+    capex_scale_vs_reference,
+    forces_grid_electricity_zero,
+    get_product_profile,
+    routine_om_scale,
+)
 
 
 NAVY = "#1F3864"
@@ -66,6 +73,13 @@ def main() -> None:
         f"<code>01_Dashboard</code> 核心KPI、<code>05_Annual_Model</code> 年度现金流/节省、以及 OPEX/CAPEX 结构与“为什么更好”的证据说明。</p>",
         unsafe_allow_html=True,
     )
+    with st.expander("先看这个：谁付钱 / 钱从哪来（模型口径）", expanded=True):
+        st.markdown(
+            "- **业主（客户）支付**：年度服务费/订阅费（EMC 与 LaaS），以及 **电费**（默认业主承担）。\n"
+            "- **服务商（Huapu/HPwinner）支付**：项目 **CAPEX（Y0一次性投入）**，以及 **运维OPEX**（人工/维修、平台、备件）。\n"
+            "- **电费承担开关**：`02_Inputs!D25`（`0=业主承担电费；1=服务商承担电费`）。\n"
+            "- **理解方式**：服务商的OPEX/CAPEX是“成本端现金流出”；资金来源主要来自业主付的服务费（收入端），两者差额形成利润/回收期。"
+        )
 
     default_dir = str(_ROOT / "Dashboard_LaaS_vs_NYTG" / "new_models")
     with st.sidebar:
@@ -74,7 +88,7 @@ def main() -> None:
         view_mode = st.radio("展示模式", options=["只看关键结论（1分钟版）", "展开明细（投委会版）"], index=0)
         show_all_years_table = st.checkbox("显示年度表格（像Excel）", value=(view_mode != "只看关键结论（1分钟版）"))
 
-    df_sum, df_long, tiers_dict = _load(new_models_dir, cache_bust="v3_big_table_provider_lines")
+    df_sum, df_long, tiers_dict = _load(new_models_dir, cache_bust="v4_product_cells_and_costtab")
 
     if df_sum.empty:
         st.warning("No workbooks found. Check the folder path.")
@@ -86,6 +100,60 @@ def main() -> None:
 
     dsel = df_sum[df_sum["tier"] == sel].iloc[0].to_dict()
     df_t = df_long[df_long["tier"] == sel].copy()
+
+    # Product selector (what-if override). Default to workbook stored product_key.
+    workbook_pk = str(dsel.get("product_key") or "AI_lightning_grid")
+    product_options: list[ProductKey] = ["AI_lightning_grid", "AI_battery_integrated_grid", "AI_plus_solar_offgrid"]
+    with st.sidebar:
+        st.subheader("产品类型（可做what-if）")
+        pk_sel: ProductKey = st.selectbox(
+            "产品类型(product_key)",
+            options=product_options,
+            index=product_options.index(workbook_pk) if workbook_pk in product_options else 0,
+        )
+        if pk_sel != workbook_pk:
+            st.caption("假设覆盖（未写回工作簿）：图表/表格按当前产品类型重算；工作簿默认值仍可审计。")
+        st.caption("切换产品会影响的关键单元格（工作簿内）")
+        st.code(
+            "02_Inputs!D48  产品类型(product_key)\n"
+            "02_Inputs!D28  LaaS CAPEX/盏\n"
+            "02_Inputs!D31  LaaS 节电率\n"
+            "02_Inputs!D32:D34  LaaS 非电费运维（人工/平台/备件）",
+            language="text",
+        )
+        st.caption("提示：如果你在WPS/Excel里改了 D48，要想让本页读取到变化，需要保存文件（且若未自动重算，则先触发重算）。")
+
+        # Small explainer table so audience understands the implications.
+        st.caption("产品差异说明（模型口径）")
+        rows = []
+        for pk in product_options:
+            prof = get_product_profile(pk)
+            rows.append(
+                {
+                    "product_key": pk,
+                    "节电率下限(推导)": prof.implied_grid_saving_rate(),
+                    "CAPEX缩放(相对AI_lightning_grid)": capex_scale_vs_reference(pk),
+                    "非电费运维缩放(相对AI_lightning_grid)": routine_om_scale(pk),
+                    "电费规则": "离网：电费≈0" if forces_grid_electricity_zero(pk) else "并网：按节电率计算",
+                }
+            )
+        st.dataframe(pd.DataFrame(rows), use_container_width=True, height=160)
+
+    # Apply what-if overlay to selected-tier dict (only affects derived views; does not touch cached workbook values)
+    dsel_view = dict(dsel)
+    dsel_view["product_key_active"] = pk_sel
+    # Scale LaaS per-lamp CAPEX using product profile (relative to AI_lightning_grid ref).
+    dsel_view["capex_laas_per_lamp"] = float(dsel.get("capex_laas_per_lamp") or 0.0) * float(capex_scale_vs_reference(pk_sel))
+    # Update LaaS saving rate baseline from product physics.
+    try:
+        dsel_view["laas_saving_rate"] = max(float(dsel.get("laas_saving_rate") or 0.0), float(get_product_profile(pk_sel).implied_grid_saving_rate()))
+    except Exception:
+        pass
+    # Scale non-electric OPEX components by product routine factor.
+    om_scale = float(routine_om_scale(pk_sel))
+    for k in ("opex_om_per_lamp", "opex_platform", "opex_spares"):
+        if dsel.get(k) is not None:
+            dsel_view[k] = float(dsel.get(k) or 0.0) * om_scale
 
     # 1-minute: KPI cards
     st.subheader("A) 关键结论（1分钟版）")
@@ -103,7 +171,7 @@ def main() -> None:
     # A wide table similar to the screenshot: year 0..10, EMC vs LaaS core cashflow building blocks.
     years = [0] + list(df_t["year"].tolist())
     trust_capex = [-(dsel.get("capex_emc_per_lamp") or 0.0) * float(dsel.get("lamps") or 0.0)] + [0.0] * 10
-    laas_capex = [-(dsel.get("capex_laas_per_lamp") or 0.0) * float(dsel.get("lamps") or 0.0)] + [0.0] * 10
+    laas_capex = [-(dsel_view.get("capex_laas_per_lamp") or 0.0) * float(dsel_view.get("lamps") or 0.0)] + [0.0] * 10
     # Owner total spend rows already mirror Annual_Model; use 0 for year0.
     trust_spend = [0.0] + [float(x or 0.0) for x in df_t["owner_spend_emc"].tolist()]
     laas_spend = [0.0] + [float(x or 0.0) for x in df_t["owner_spend_laas"].tolist()]
@@ -121,8 +189,8 @@ def main() -> None:
         the annual fee schedule already extracted from 05_Annual_Model.
         This avoids relying on cached values in formula-heavy rows that may be blank.
         """
-        lamps = float(dsel.get("lamps") or 0.0)
-        capex_per_lamp = float(dsel.get("capex_laas_per_lamp") or 0.0) if kind == "laas" else float(dsel.get("capex_emc_per_lamp") or 0.0)
+        lamps = float(dsel_view.get("lamps") or 0.0)
+        capex_per_lamp = float(dsel_view.get("capex_laas_per_lamp") or 0.0) if kind == "laas" else float(dsel_view.get("capex_emc_per_lamp") or 0.0)
         capex_y0 = capex_per_lamp * lamps
 
         # baseline electricity (Y1) - compute same as cost tab fallback
@@ -135,18 +203,20 @@ def main() -> None:
             baseline_elec_y1 = lamps * watts / 1000.0 * hpd * dpy * price if (lamps and watts and hpd and dpy and price) else 0.0
         baseline_elec_y1 = float(baseline_elec_y1 or 0.0)
 
-        saving = float(dsel.get("laas_saving_rate") or 0.0) if kind == "laas" else float(dsel.get("emc_saving_rate") or 0.0)
+        saving = float(dsel_view.get("laas_saving_rate") or 0.0) if kind == "laas" else float(dsel_view.get("emc_saving_rate") or 0.0)
         elec_after = [0.0] + [baseline_elec_y1 * (1.0 - saving)] * 10
 
         # Provider bears electricity cost only when switch is 1 in template; EMC typically 0.
         owner_pays_flag = float(dsel.get("emc_owner_pays_elec_flag") or 0.0)
         provider_bears_elec = (owner_pays_flag == 1.0) if kind == "emc" else True  # LaaS assumed provider bears unless workbook says otherwise
+        if kind == "laas" and forces_grid_electricity_zero(pk_sel):
+            provider_bears_elec = False
         elec_cost = [0.0] + ([elec_after[i] for i in range(1, 11)] if provider_bears_elec else [0.0] * 10)
 
         # OPEX components (non-electric)
-        om = float(dsel.get("opex_om_per_lamp") or 0.0) * lamps
-        platform = float(dsel.get("opex_platform") or 0.0)
-        spares = float(dsel.get("opex_spares") or 0.0)
+        om = float(dsel_view.get("opex_om_per_lamp") or 0.0) * lamps
+        platform = float(dsel_view.get("opex_platform") or 0.0)
+        spares = float(dsel_view.get("opex_spares") or 0.0)
         om_y = [0.0] + [om] * 10
         platform_y = [0.0] + [platform] * 10
         spares_y = [0.0] + [spares] * 10
@@ -318,6 +388,7 @@ def main() -> None:
 
     # Cumulative cashflow chart (provider) to show payback timing clearly
     st.subheader("累计现金流（服务商视角）：LaaS vs EMC（看回本更直观）")
+    st.caption("口径：这是**服务商**的累计现金流（包含CAPEX投入与运维OPEX成本），用于展示回本速度。")
     cum_emc = prov_emc.get("累计现金流", [0.0] * 11)
     cum_laas = prov_laas.get("累计现金流", [0.0] * 11)
     df_cum = pd.DataFrame({"year": years, "EMC": cum_emc, "LaaS": cum_laas})
@@ -330,10 +401,11 @@ def main() -> None:
 
     # OPEX factor story chart (Y1) - why LaaS is smaller
     st.subheader("为什么LaaS的OPEX更小：拆解对比（Y1，电费 + 非电费运维）")
-    lamps = float(dsel.get("lamps") or 0.0)
-    om_y1 = float(dsel.get("opex_om_per_lamp") or 0.0) * lamps
-    platform_y1 = float(dsel.get("opex_platform") or 0.0)
-    spares_y1 = float(dsel.get("opex_spares") or 0.0)
+    st.caption("口径：这里展示的是成本拆解。电费默认由**业主**承担（见 `02_Inputs!D25`），非电费运维为**服务商**运维成本。")
+    lamps = float(dsel_view.get("lamps") or 0.0)
+    om_y1 = float(dsel_view.get("opex_om_per_lamp") or 0.0) * lamps
+    platform_y1 = float(dsel_view.get("opex_platform") or 0.0)
+    spares_y1 = float(dsel_view.get("opex_spares") or 0.0)
 
     baseline_elec_y1 = dsel.get("baseline_electricity_y1")
     if baseline_elec_y1 is None or baseline_elec_y1 != baseline_elec_y1:
@@ -344,8 +416,8 @@ def main() -> None:
         baseline_elec_y1 = lamps * watts / 1000.0 * hpd * dpy * price if (lamps and watts and hpd and dpy and price) else 0.0
     baseline_elec_y1 = float(baseline_elec_y1 or 0.0)
 
-    emc_save = float(dsel.get("emc_saving_rate") or 0.0)
-    laas_save = float(dsel.get("laas_saving_rate") or 0.0)
+    emc_save = float(dsel_view.get("emc_saving_rate") or 0.0)
+    laas_save = float(dsel_view.get("laas_saving_rate") or 0.0)
     elec_emc_y1 = baseline_elec_y1 * (1.0 - emc_save)
     elec_laas_y1 = baseline_elec_y1 * (1.0 - laas_save)
 
@@ -431,36 +503,37 @@ def main() -> None:
 
     with tab_cost:
         st.subheader("D) 成本拆解：OPEX包含什么 + CAPEX规模（来自 02_Inputs / 03_Baseline）")
-        lamps = dsel.get("lamps") or 0.0
-        capex_emc = (dsel.get("capex_emc_per_lamp") or 0.0) * float(lamps)
-        capex_laas = (dsel.get("capex_laas_per_lamp") or 0.0) * float(lamps)
-        baseline_elec = dsel.get("baseline_electricity_y1")
+        st.caption("说明：本页的OPEX饼图（人工/维修/平台/备件）是**服务商支付的运维成本**；电费是否由服务商承担取决于 `02_Inputs!D25`。")
+        lamps = dsel_view.get("lamps") or 0.0
+        capex_emc = (dsel_view.get("capex_emc_per_lamp") or 0.0) * float(lamps)
+        capex_laas = (dsel_view.get("capex_laas_per_lamp") or 0.0) * float(lamps)
+        baseline_elec = dsel_view.get("baseline_electricity_y1")
         if baseline_elec is None or baseline_elec != baseline_elec:
-            price = float(dsel.get("electricity_price_per_kwh") or 0.0)
-            watts = float(dsel.get("watts_per_lamp") or 0.0)
-            hpd = float(dsel.get("hours_per_day") or 0.0)
-            dpy = float(dsel.get("days_per_year") or 0.0)
+            price = float(dsel_view.get("electricity_price_per_kwh") or 0.0)
+            watts = float(dsel_view.get("watts_per_lamp") or 0.0)
+            hpd = float(dsel_view.get("hours_per_day") or 0.0)
+            dpy = float(dsel_view.get("days_per_year") or 0.0)
             baseline_elec = float(lamps) * watts / 1000.0 * hpd * dpy * price if (lamps and watts and hpd and dpy and price) else None
         st.markdown(
             f"- **灯具数量**：{_money(lamps)}\n"
             f"- **CAPEX（EMC vs LaaS）**：{_money(capex_emc)} → {_money(capex_laas)}\n"
             f"- **基准电费(Y1)**：{_money(baseline_elec)}\n"
-            f"- **节电率（EMC vs LaaS）**：{_pct(dsel.get('emc_saving_rate'))} → {_pct(dsel.get('laas_saving_rate'))}\n"
+            f"- **节电率（EMC vs LaaS）**：{_pct(dsel_view.get('emc_saving_rate'))} → {_pct(dsel_view.get('laas_saving_rate'))}\n"
         )
         opex_breakdown = pd.DataFrame(
             {
                 "项目": ["人工/维修（按灯）", "平台费", "备件"],
                 "金额": [
-                    (dsel.get("opex_om_per_lamp") or 0.0) * float(lamps),
-                    dsel.get("opex_platform") or 0.0,
-                    dsel.get("opex_spares") or 0.0,
+                    (dsel_view.get("opex_om_per_lamp") or 0.0) * float(lamps),
+                    dsel_view.get("opex_platform") or 0.0,
+                    dsel_view.get("opex_spares") or 0.0,
                 ],
             }
         )
         fig_o = px.pie(opex_breakdown, names="项目", values="金额", title="非电费运维结构（模板输入拆解）", template="plotly_white")
         fig_o.update_layout(height=360, font_color=NAVY)
         st.plotly_chart(fig_o, use_container_width=True)
-        st.caption("说明：电费在模板中通过“基准电费 × (1-节电率)”单独计算，因此此处的运维拆解展示非电费部分。")
+        st.caption("电费在模板中通过“基准电费 × (1-节电率)”单独计算；此处饼图仅展示非电费运维（默认由服务商承担）。")
 
     with tab_story:
         st.subheader("E) 为什么更好（证据 + 映射到单元格）")
@@ -468,6 +541,7 @@ def main() -> None:
             has_upfront=float(dsel.get("upfront") or 0.0) > 0,
             has_tail_discount=float(dsel.get("tail_discount") or 0.0) > 0,
             laas_saving_rate=dsel.get("laas_saving_rate"),
+            product_key=str(dsel_view.get("product_key_active") or dsel.get("product_key") or ""),
         )
         for c in cards:
             with st.expander(c.title, expanded=(view_mode != "只看关键结论（1分钟版）")):

@@ -21,10 +21,13 @@ from typing import Literal
 
 import numpy_financial as npf
 from openpyxl import load_workbook
+from openpyxl.worksheet.datavalidation import DataValidation
+from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 
 from business_model_comparison.models import build_baseline_energy_trust
 from business_model_comparison.roadlight_data import load_roadlight_all
 from Dashboard_LaaS_vs_NYTG.laas_feasible import LaaSScenario, evaluate_laas_scenario
+from Dashboard_LaaS_vs_NYTG.product_profiles import capex_scale_vs_reference, get_product_profile, routine_om_scale
 
 ROOT = Path(__file__).resolve().parents[1]
 TEMPLATE = ROOT / "Dashboard_LaaS_vs_NYTG" / "通用版_能源托管_vs_LaaS_财务模型_v3_逻辑复核版.xlsx"
@@ -65,6 +68,7 @@ class TierSpec:
     name: str
     term_years: int
     opex_mode: Literal["uniform_pct", "electricity_only_pct", "ai_plus_solar"]
+    product_key: Literal["AI_lightning_grid", "AI_battery_integrated_grid", "AI_plus_solar_offgrid"]
     annual_fee_rmb: float
     upfront_rmb: float
     tail_reduction_rmb: float
@@ -109,7 +113,8 @@ def select_10_tiers(*, baseline) -> list[TierSpec]:
         ("Tier02_UniformAI_85", 10, "uniform_pct", 0.85, 0.0, 0.0),
         ("Tier03_ElecOnly_85", 10, "electricity_only_pct", 0.85, 0.0, 0.0),
         ("Tier04_ElecOnly_85_Upfront300k", 10, "electricity_only_pct", 0.85, 300_000.0, 0.0),
-        ("Tier05_AISolar", 10, "ai_plus_solar", 0.00, 0.0, 0.0),
+        # Tier05 no longer uses a dedicated “AI+solar mode”; solar becomes a product type (see product_key).
+        ("Tier05_UniformAI_75", 10, "uniform_pct", 0.75, 0.0, 0.0),
         ("Tier06_Upfront_Prepay", 10, "uniform_pct", 0.85, 1_000_000.0, 0.0),
         ("Tier07_TailDiscount", 10, "uniform_pct", 0.85, 0.0, 250_000.0),
         ("Tier08_HigherFee_StrongerSLA", 10, "uniform_pct", 0.85, 0.0, 350_000.0),
@@ -118,7 +123,13 @@ def select_10_tiers(*, baseline) -> list[TierSpec]:
     ]
 
     picked: list[TierSpec] = []
-    for name, term, mode, red, upfront, tail in mech:
+    product_cycle: list[Literal["AI_lightning_grid", "AI_battery_integrated_grid", "AI_plus_solar_offgrid"]] = [
+        "AI_lightning_grid",
+        "AI_battery_integrated_grid",
+        "AI_plus_solar_offgrid",
+    ]
+    for i, (name, term, mode, red, upfront, tail) in enumerate(mech):
+        product_key = product_cycle[i % len(product_cycle)]
         s_rate = saving_rate_for(mode, red)
         # Owner-positivity implies an upper bound on annual fee (ignoring retained mgmt which we set to 0):
         fee_max_owner = float(other_y1 + elec_pre_y1 * s_rate) - 1.0
@@ -137,6 +148,7 @@ def select_10_tiers(*, baseline) -> list[TierSpec]:
                 ai_opex_reduction_pct=float(red),
                 last_four_year_fee_reduction_rmb=float(tail),
                 opex_mode=mode,  # type: ignore[arg-type]
+                product_key=product_key,
             )
             r = evaluate_laas_scenario(baseline, scen, discount_rate_annual=0.12)
             if not r.provider_feasible:
@@ -171,6 +183,7 @@ def select_10_tiers(*, baseline) -> list[TierSpec]:
                 name=name,
                 term_years=int(term),
                 opex_mode=mode,  # type: ignore[arg-type]
+                product_key=product_key,
                 annual_fee_rmb=float(best[1]),
                 upfront_rmb=float(upfront),
                 tail_reduction_rmb=float(tail),
@@ -281,7 +294,7 @@ def _laa_s_inputs_for_mode(
     r = max(0.0, min(0.95, float(reduction_pct)))
     if mode == "ai_plus_solar":
         return 0.999, 0.0, 0.0, 0.0, 0
-    if mode == "electricity_only":
+    if mode == "electricity_only_pct":
         d31 = r
         per_lamp, plat, spare = _split_non_elec_opex_components(
             lamps=lamps,
@@ -479,6 +492,10 @@ def _validate_cached_kpis(xlsx_path: Path) -> None:
     for addr in ("C18", "D18", "C19", "D19", "C20", "D20", "C21", "D21"):
         s = snip("01_Dashboard", addr)
         assert _has_f_v(s), addr
+    # Product-driven inputs in 02_Inputs are formula cells and must have cached values for WPS.
+    for addr in ("D28", "D31", "D32", "D33", "D34"):
+        s = snip("02_Inputs", addr)
+        assert _has_f_v(s), addr
     # Sensitivity (row19 B..H) should have cached values so WPS won't show same number everywhere.
     for addr in ("B19", "C19", "D19", "E19", "F19", "G19", "H19"):
         s = snip("06_Sensitivity", addr)
@@ -522,6 +539,7 @@ def fill_one_tier(
         ai_opex_reduction_pct=float(tier.ai_reduction_pct),
         last_four_year_fee_reduction_rmb=float(tier.tail_reduction_rmb),
         opex_mode=tier.opex_mode,
+        product_key=tier.product_key,  # type: ignore[arg-type]
     )
     laa_res = evaluate_laas_scenario(baseline, scenario, discount_rate_annual=float(discount_annual))
 
@@ -576,7 +594,7 @@ def fill_one_tier(
     # User requirement: under EMC, electricity is borne by owner (业主承担电费).
     ws_in["D25"] = 0
 
-    ws_in["D28"] = capex0 / lamps if lamps > 0 else 0.0
+    capex_ref_per_lamp = capex0 / lamps if lamps > 0 else 0.0
     ws_in["D29"] = float(scenario.annual_service_fee_rmb)
     ws_in["D30"] = 0.0
     d31, d32, d33, d34, d35 = _laa_s_inputs_for_mode(
@@ -586,6 +604,11 @@ def fill_one_tier(
         baseline_other_y1=other_y1,
         lamps=lamps,
     )
+    # Saving-rate baseline from product physics (PRODUCT_ROWS), then keep the existing narrative guardrails.
+    try:
+        d31 = max(float(d31), float(get_product_profile(tier.product_key).implied_grid_saving_rate()))  # type: ignore[arg-type]
+    except Exception:
+        pass
     # Enforce “AI > EMC” narrative: LaaS saving rate must be higher than EMC's saving rate.
     d31 = max(float(d31), float(emc_saving) + 0.03)
     # Owner-facing sensitivity assumes owner pays electricity so it varies with saving rate.
@@ -602,14 +625,138 @@ def fill_one_tier(
         default_plat=float(d33) if d33 > 0 else 350_000.0,
         default_spare=float(d34) if d34 > 0 else 150_000.0,
     )
-    ws_in["D31"] = float(d31)
-    ws_in["D32"] = float(d32)
-    ws_in["D33"] = float(d33)
-    ws_in["D34"] = float(d34)
+    # Product table (used for Excel/WPS dropdown-driven lookup).
+    # Columns: product_key | saving_floor | capex_per_lamp | om_per_lamp | platform | spares | note
+    ws_in["A50"] = "产品对比（来自 defaults.py PRODUCT_ROWS；切换 D48 将联动 D28/D31/D32:D34）"
+    ws_in["A51"] = "产品(product_key)"
+    ws_in["B51"] = "节电率下限(推导)"
+    ws_in["C51"] = "LaaS CAPEX/盏"
+    ws_in["D51"] = "人工/维修(元/盏/年)"
+    ws_in["E51"] = "平台费(元/年)"
+    ws_in["F51"] = "备件(元/年)"
+    ws_in["G51"] = "说明"
+
+    product_keys: list[str] = [
+        "AI_lightning_grid",
+        "AI_battery_integrated_grid",
+        "AI_plus_solar_offgrid",
+    ]
+    product_rows: dict[str, dict[str, float]] = {}
+    for ridx, pk in enumerate(product_keys, start=52):
+        # Evaluate scenario under each product key to get a consistent provider non-electric OPEX target.
+        scen_pk = LaaSScenario(
+            term_years=int(tier.term_years),
+            annual_service_fee_rmb=float(tier.annual_fee_rmb),
+            upfront_rmb=float(tier.upfront_rmb),
+            ai_opex_reduction_pct=float(tier.ai_reduction_pct),
+            last_four_year_fee_reduction_rmb=float(tier.tail_reduction_rmb),
+            opex_mode=tier.opex_mode,
+            product_key=pk,  # type: ignore[arg-type]
+        )
+        res_pk = evaluate_laas_scenario(baseline, scen_pk, discount_rate_annual=float(discount_annual))
+        opex_y1 = float(res_pk.provider_cash_opex_rmb_y.get(1))
+        # Template split cells D32:D34 are NON-electric service-provider OPEX components.
+        # We treat provider electricity as 0 in the template fill, so non-electric target == total cash OPEX.
+        non_e_target_pk = max(0.0, opex_y1)
+        per_lamp_pk, plat_pk, spare_pk = _split_non_elec_opex_components(
+            lamps=lamps,
+            target_total=non_e_target_pk,
+            default_per_lamp=float(d32) if d32 > 0 else 60.0,
+            default_plat=float(d33) if d33 > 0 else 350_000.0,
+            default_spare=float(d34) if d34 > 0 else 150_000.0,
+        )
+        prof_pk = get_product_profile(pk)  # type: ignore[arg-type]
+        saving_floor = float(prof_pk.implied_grid_saving_rate())
+        capex_per_lamp_pk = float(capex_ref_per_lamp) * float(capex_scale_vs_reference(pk))  # type: ignore[arg-type]
+
+        ws_in[f"A{ridx}"] = pk
+        ws_in[f"B{ridx}"] = float(saving_floor)
+        ws_in[f"C{ridx}"] = float(capex_per_lamp_pk)
+        ws_in[f"D{ridx}"] = float(per_lamp_pk)
+        ws_in[f"E{ridx}"] = float(plat_pk)
+        ws_in[f"F{ridx}"] = float(spare_pk)
+        ws_in[f"G{ridx}"] = "离网太阳能：电费≈0" if pk == "AI_plus_solar_offgrid" else ("含电池：应急/出勤更少" if pk == "AI_battery_integrated_grid" else "基础并网AI灯")
+
+        product_rows[pk] = {
+            "saving_floor": float(saving_floor),
+            "capex_per_lamp": float(capex_per_lamp_pk),
+            "per_lamp": float(per_lamp_pk),
+            "plat": float(plat_pk),
+            "spare": float(spare_pk),
+        }
+
+    # Active product values (used by Python-side cached values + provider cashflow simulation)
+    active_pk = str(tier.product_key)
+    pr = product_rows.get(active_pk) or product_rows.get("AI_lightning_grid") or {}
+    capex_per_lamp_active = float(pr.get("capex_per_lamp", capex_ref_per_lamp))
+    d31 = max(float(emc_saving) + 0.03, float(pr.get("saving_floor", 0.0)), float(d31))
+    d32 = float(pr.get("per_lamp", d32))
+    d33 = float(pr.get("plat", d33))
+    d34 = float(pr.get("spare", d34))
+
+    # Wire key inputs to product dropdown so changing D48 updates these cells automatically.
+    lookup = "$A$52:$G$54"
+    ws_in["D28"] = f"=VLOOKUP($D$48,{lookup},3,FALSE)"
+    ws_in["D31"] = f"=MAX($D$21+0.03,VLOOKUP($D$48,{lookup},2,FALSE))"
+    ws_in["D32"] = f"=VLOOKUP($D$48,{lookup},4,FALSE)"
+    ws_in["D33"] = f"=VLOOKUP($D$48,{lookup},5,FALSE)"
+    ws_in["D34"] = f"=VLOOKUP($D$48,{lookup},6,FALSE)"
     ws_in["D35"] = int(d35)
+
+    # Style the product block to match template section headers (same palette as A18/A28 in 02_Inputs).
+    header_fill = PatternFill(patternType="solid", fgColor="00E8F0F8")
+    header_font = Font(name="Arial", size=11, bold=True, color="00111827")
+    header_align = Alignment(horizontal="left", vertical="center")
+    subhead_font = Font(name="Arial", size=10, bold=True, color="00111827")
+    subhead_fill = PatternFill(patternType="solid", fgColor="00F8FAFC")
+    thin = Side(style="thin", color="00D1D5DB")
+    thin_border = Border(left=thin, right=thin, top=thin, bottom=thin)
+
+    # Title row (merge across A..G)
+    try:
+        ws_in.merge_cells("A50:G50")
+    except Exception:
+        pass
+    tcell = ws_in["A50"]
+    tcell.fill = header_fill
+    tcell.font = header_font
+    tcell.alignment = header_align
+    tcell.border = thin_border
+
+    # Header row (A51..G51)
+    for col in "ABCDEFG":
+        c = ws_in[f"{col}51"]
+        c.fill = subhead_fill
+        c.font = subhead_font
+        c.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        c.border = thin_border
+
+    # Data rows (A52..G54)
+    for r in range(52, 55):
+        for col in "ABCDEFG":
+            c = ws_in[f"{col}{r}"]
+            c.border = thin_border
+            if col in ("A", "G"):
+                c.alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
+            else:
+                c.alignment = Alignment(horizontal="center", vertical="center")
 
     # EMC tuned fee (computed once in main; ensures positive & still inferior to LaaS).
     ws_in["D19"] = float(emc_fee_y1_tuned)
+
+    # Section header for commercial terms block (row 44, just above D45/D46).
+    # Apply the same highlight style as the template's section headers.
+    ws_in["A44"] = "商业条款/收费机制（可调整）"
+    try:
+        ws_in.merge_cells("A44:G44")
+    except Exception:
+        pass
+    h44 = ws_in["A44"]
+    h44.fill = PatternFill(patternType="solid", fgColor="00E8F0F8")
+    h44.font = Font(name="Arial", size=11, bold=True, color="00111827")
+    h44.alignment = Alignment(horizontal="left", vertical="center")
+    thin = Side(style="thin", color="00D1D5DB")
+    h44.border = Border(left=thin, right=thin, top=thin, bottom=thin)
 
     ws_in["A45"] = "首期款(元)/客户预付"
     ws_in["D45"] = float(tier.upfront_rmb)
@@ -617,6 +764,22 @@ def fill_one_tier(
     ws_in["D46"] = float(tier.tail_reduction_rmb)
     ws_in["A47"] = "方案标识"
     ws_in["D47"] = tier.name
+    ws_in["A48"] = "产品类型(product_key)"
+    ws_in["D48"] = str(tier.product_key)
+    # Data-validation dropdown for product selection (Excel/WPS).
+    dv = DataValidation(
+        type="list",
+        formula1='"AI_lightning_grid,AI_battery_integrated_grid,AI_plus_solar_offgrid"',
+        allow_blank=False,
+        showErrorMessage=True,
+        errorTitle="无效产品类型",
+        error="请从下拉框选择：AI_lightning_grid / AI_battery_integrated_grid / AI_plus_solar_offgrid",
+        showInputMessage=True,
+        promptTitle="产品类型(product_key)",
+        prompt="用于区分不同产品的CAPEX/OPEX假设（来自 defaults.py PRODUCT_ROWS）。",
+    )
+    ws_in.add_data_validation(dv)
+    dv.add(ws_in["D48"])
 
     # Sanity check: owner Y1 net savings should be positive for both EMC and LaaS (like the reference template).
     # EMC owner outflow Y1 = elec*(1-emc_saving) + fee (owner pays elec, D25=0, D17=0)
@@ -655,7 +818,7 @@ def fill_one_tier(
     trust_other_y1 = float(ws_in["D20"].value or 0.0)
     laa_other_y1 = float(ws_in["D30"].value or 0.0)
     trust_capex = float(ws_in["D18"].value or 0.0) * lamps
-    laa_capex = float(ws_in["D28"].value or 0.0) * lamps
+    laa_capex = float(capex_per_lamp_active) * lamps
     upfront = float(tier.upfront_rmb)
 
     ws_ann = wb["05_Annual_Model"]
@@ -788,6 +951,14 @@ def fill_one_tier(
     patch_workbook_cached_values(
         out_path,
         {
+            "02_Inputs": {
+                # Product-driven inputs are formula cells; cache active product values for WPS.
+                "D28": float(capex_per_lamp_active),
+                "D31": float(d31),
+                "D32": float(d32),
+                "D33": float(d33),
+                "D34": float(d34),
+            },
             "00_LaaS收益来源": {
                 # Prevent WPS blanks in Tier5 (and others): cache key savings cells used by the first sheet narrative.
                 "C15": float(emc_saving),

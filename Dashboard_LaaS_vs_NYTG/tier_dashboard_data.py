@@ -52,6 +52,7 @@ def build_tier_tables(*, new_models_dir: Path) -> tuple[pd.DataFrame, pd.DataFra
                 "opex_om_per_lamp": t.opex_om_per_lamp,
                 "opex_platform": t.opex_platform,
                 "opex_spares": t.opex_spares,
+                "product_key": t.product_key,
                 # Provider KPIs
                 "emc_npv": t.emc_npv,
                 "emc_irr": t.emc_irr,
@@ -131,6 +132,7 @@ def tier_traceability_dict(t: TierExtract) -> dict:
             "opex_om_per_lamp": "02_Inputs!D22",
             "opex_platform": "02_Inputs!D23",
             "opex_spares": "02_Inputs!D24",
+            "product_key": "02_Inputs!D48",
         },
         "provider_cashflow_block": {
             "labels": "05_Annual_Model (通过文本标签定位行；读取 C..M = Y0..Y10 缓存值)",
