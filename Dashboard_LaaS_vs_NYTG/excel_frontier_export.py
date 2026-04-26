@@ -122,10 +122,14 @@ def _localize_simple_comparison(df: pd.DataFrame) -> pd.DataFrame:
             "trust_capex_rmb": "能源托管_CAPEX",
             "trust_service_fee_rmb": "能源托管_服务费",
             "trust_upfront_rmb": "能源托管_首期款",
+            "trust_cash_opex_rmb": "能源托管_OPEX(现金)",
+            "trust_net_cashflow_rmb": "能源托管_净现金流",
             "trust_net_cashflow_cumulative_rmb": "能源托管_累计净现金流",
             "laas_capex_rmb": "LaaS_CAPEX",
             "laas_service_fee_rmb": "LaaS服务费",
             "laas_upfront_rmb": "LaaS首期款",
+            "laas_cash_opex_rmb": "LaaS_OPEX(现金)",
+            "laas_net_cashflow_rmb": "LaaS净现金流",
             "laas_net_cashflow_cumulative_rmb": "LaaS累计净现金流",
         },
     )
@@ -447,31 +451,45 @@ def build_workbook() -> Path:
             end_r, end_c = _write_table(ws, r, 1, best_yearly)
             r = end_r + 1
 
-    # Add scatter chart: provider-feasible offers (client_gap vs NPV), with frontier highlighted via separate table.
-    r = _section(ws, r, "图表：客户价值缺口 vs 华普项目NPV（华普可行方案全集）", c1=1, c2=10)
-    # Put a compact data block for charting.
-    # IMPORTANT: take both sides of client_gap around 0 to avoid showing only very negative points.
-    chart_df = provider_df[["client_gap_rmb", "npv_project_rmb"]].copy()
-    chart_df = chart_df.sort_values("client_gap_rmb")
-    neg = chart_df[chart_df["client_gap_rmb"] <= 0].tail(1000)
-    pos = chart_df[chart_df["client_gap_rmb"] > 0].head(1000)
-    chart_df = pd.concat([neg, pos], axis=0).drop_duplicates()
-    chart_df.columns = ["客户价值缺口_PV", "华普项目NPV"]
-    end_r, end_c = _write_table(ws, r, 1, chart_df)
-
-    chart = ScatterChart()
-    chart.title = "客户价值缺口 vs 华普项目NPV"
-    chart.x_axis.title = "客户价值缺口（PV，≤0表示客户更优）"
-    chart.y_axis.title = "华普项目NPV（元）"
-    chart.legend = None
-
-    xvalues = Reference(ws, min_col=1, min_row=r + 1, max_row=end_r - 1)
-    yvalues = Reference(ws, min_col=2, min_row=r + 1, max_row=end_r - 1)
-    series = Series(yvalues, xvalues, title="方案点")
-    series.marker.symbol = "circle"
-    series.marker.size = 4
-    chart.series.append(series)
-    ws.add_chart(chart, "E14")
+    # Client-facing: remove provider-NPV scatter chart; show a clean tier list instead.
+    r = _section(ws, r, "10个共赢方案分层（多机制）", c1=1, c2=10)
+    show = topN.copy()
+    if not show.empty and "opex_mode" in show.columns:
+        show["opex_mode"] = show["opex_mode"].map(lambda x: OPEX_MODE_CN.get(str(x), str(x)))
+    keep = [
+        "term_years",
+        "annual_service_fee_rmb",
+        "last_four_year_fee_reduction_rmb",
+        "upfront_rmb",
+        "opex_mode",
+        "ai_opex_reduction_pct",
+        "payback_months",
+        "min_client_savings_rmb_per_year",
+        "min_provider_gross_profit_uplift_rmb_per_year",
+    ]
+    keep = [c for c in keep if c in show.columns]
+    show = show[keep].head(10)
+    show = show.rename(
+        columns={
+            "term_years": "合同年限",
+            "annual_service_fee_rmb": "前6年年服务费",
+            "last_four_year_fee_reduction_rmb": "后4年年降幅",
+            "upfront_rmb": "首期款",
+            "opex_mode": "降本模式",
+            "ai_opex_reduction_pct": "AI降本比例",
+            "payback_months": "回本周期(月)",
+            "min_client_savings_rmb_per_year": "客户最少年节省",
+            "min_provider_gross_profit_uplift_rmb_per_year": "华普最少年毛利提升",
+        }
+    )
+    end_r, end_c = _write_table(ws, r, 1, show)
+    for rr in range(r + 1, end_r):
+        for cc in range(1, 1 + len(show.columns)):
+            header = ws.cell(r, cc).value
+            if header in ("前6年年服务费", "后4年年降幅", "首期款", "客户最少年节省", "华普最少年毛利提升"):
+                ws.cell(rr, cc).number_format = "#,##0"
+            if header == "AI降本比例":
+                ws.cell(rr, cc).number_format = "0.00%"
 
     # 2) Executive Summary
     ws2 = wb.create_sheet("执行摘要", 1)

@@ -155,29 +155,43 @@ def simple_cashflow_comparison_table(r: LaaSResults, baseline: BaselineResults) 
             "trust_capex_rmb": float(baseline.capex_y0_rmb),
             "trust_service_fee_rmb": 0.0,
             "trust_upfront_rmb": 0.0,
+            "trust_cash_opex_rmb": 0.0,
+            "trust_net_cashflow_rmb": float(baseline_y0),
             "trust_net_cashflow_cumulative_rmb": baseline_cum,
             "laas_capex_rmb": float(baseline.capex_y0_rmb),
             "laas_service_fee_rmb": 0.0,
             "laas_upfront_rmb": float(r.scenario.upfront_rmb),
+            "laas_cash_opex_rmb": 0.0,
+            "laas_net_cashflow_rmb": float(laas_y0),
             "laas_net_cashflow_cumulative_rmb": laas_cum,
         }
     )
 
     for y in baseline.years:
-        baseline_net = float(baseline.revenue_rmb_y.get(y)) - float(baseline.cash_opex_rmb_y.get(y))
-        laas_net = float(r.provider_revenue_rmb_y.get(y)) - float(r.provider_cash_opex_rmb_y.get(y))
+        trust_fee = float(baseline.revenue_rmb_y.get(y))
+        trust_opex = float(baseline.cash_opex_rmb_y.get(y))
+        baseline_net = trust_fee - trust_opex
+
+        laas_fee = float(r.client_payment_rmb_y.get(y))
+        laas_opex = float(r.provider_cash_opex_rmb_y.get(y))
+        laas_net = float(r.provider_revenue_rmb_y.get(y)) - laas_opex
+
         baseline_cum += baseline_net
         laas_cum += laas_net
         rows.append(
             {
                 "year": int(y),
                 "trust_capex_rmb": 0.0,
-                "trust_service_fee_rmb": float(baseline.revenue_rmb_y.get(y)),
+                "trust_service_fee_rmb": trust_fee,
                 "trust_upfront_rmb": 0.0,
+                "trust_cash_opex_rmb": trust_opex,
+                "trust_net_cashflow_rmb": baseline_net,
                 "trust_net_cashflow_cumulative_rmb": baseline_cum,
                 "laas_capex_rmb": 0.0,
-                "laas_service_fee_rmb": float(r.client_payment_rmb_y.get(y)),
+                "laas_service_fee_rmb": laas_fee,
                 "laas_upfront_rmb": 0.0,
+                "laas_cash_opex_rmb": laas_opex,
+                "laas_net_cashflow_rmb": laas_net,
                 "laas_net_cashflow_cumulative_rmb": laas_cum,
             }
         )

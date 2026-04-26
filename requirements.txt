@@ -5,3 +5,4 @@ streamlit>=1.28
 plotly>=5.18
 pytest>=7.4
 numpy-financial>=1.0
+xlsxwriter>=3.2
