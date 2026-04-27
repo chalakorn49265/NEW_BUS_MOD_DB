@@ -158,6 +158,11 @@ class TierExtract:
     opex_platform: float | None  # 02_Inputs!D23
     opex_spares: float | None  # 02_Inputs!D24
 
+    # LaaS non-electric OPEX breakdown (02_Inputs!D32:D34)
+    laas_opex_om_per_lamp: float | None  # 02_Inputs!D32
+    laas_opex_platform: float | None  # 02_Inputs!D33
+    laas_opex_spares: float | None  # 02_Inputs!D34
+
     # Product metadata
     product_key: str | None  # 02_Inputs!D48
 
@@ -196,6 +201,9 @@ class TierExtract:
             "opex_om_per_lamp": self.opex_om_per_lamp,
             "opex_platform": self.opex_platform,
             "opex_spares": self.opex_spares,
+            "laas_opex_om_per_lamp": self.laas_opex_om_per_lamp,
+            "laas_opex_platform": self.laas_opex_platform,
+            "laas_opex_spares": self.laas_opex_spares,
             "product_key": self.product_key,
             "provider_lines": self.provider_lines,
         }
@@ -246,6 +254,9 @@ def extract_one_workbook(xlsx_path: Path) -> TierExtract:
     opex_om_per_lamp = read_cached_cell(inp_xml, "D22")
     opex_platform = read_cached_cell(inp_xml, "D23")
     opex_spares = read_cached_cell(inp_xml, "D24")
+    laas_opex_om_per_lamp = read_cached_cell(inp_xml, "D32")
+    laas_opex_platform = read_cached_cell(inp_xml, "D33")
+    laas_opex_spares = read_cached_cell(inp_xml, "D34")
     # Product key is written as an inline string in the template (no cached numeric v). We read via openpyxl for this one cell.
     try:
         wb_meta = load_workbook(xlsx_path, data_only=True, read_only=True)
@@ -312,6 +323,9 @@ def extract_one_workbook(xlsx_path: Path) -> TierExtract:
         opex_om_per_lamp=opex_om_per_lamp,
         opex_platform=opex_platform,
         opex_spares=opex_spares,
+        laas_opex_om_per_lamp=laas_opex_om_per_lamp,
+        laas_opex_platform=laas_opex_platform,
+        laas_opex_spares=laas_opex_spares,
         product_key=product_key,
         provider_lines=provider_lines,
     )

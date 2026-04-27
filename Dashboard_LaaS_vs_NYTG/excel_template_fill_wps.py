@@ -34,6 +34,27 @@ TEMPLATE = ROOT / "Dashboard_LaaS_vs_NYTG" / "通用版_能源托管_vs_LaaS_财
 OUT_DIR = ROOT / "Dashboard_LaaS_vs_NYTG" / "new_models"
 DEBUG_LOG_PATH = ROOT / ".cursor" / "debug-9617d5.log"
 
+# User-provided: EMC provider service revenue (Y1) fixed across tiers.
+EMC_FEE_Y1_RMB_FIXED = 2_342_300.0  # 234.23 万元
+# Owner budget cap (基础参数：业主年度服务费预算/付费上限) should be above EMC fee.
+OWNER_SERVICE_BUDGET_Y1_RMB = 2_600_000.0
+
+# User-provided EMC baseline vs after-retrofit electricity (Y1), used as the template-grounded reference.
+EMC_BASELINE_KWH_Y1 = 3_073_266.0
+EMC_AFTER_KWH_Y1 = 1_489_860.0
+EMC_BASELINE_ELEC_FEE_Y1_RMB = 2_120_554.0
+EMC_AFTER_ELEC_FEE_Y1_RMB = 1_028_003.0
+# Implied saving fraction (≈51.5%, commonly stated as ~52%).
+EMC_SAVING_FRAC = 1.0 - (EMC_AFTER_ELEC_FEE_Y1_RMB / max(1e-9, EMC_BASELINE_ELEC_FEE_Y1_RMB))
+
+# User-provided baseline table (lights/poles counts) used for `03_Baseline` display and for
+# deriving the per-lamp wattage consistent with `EMC_BASELINE_KWH_Y1`.
+EMC_LIGHTS_COUNT_Y1 = 4568.0
+EMC_POLES_COUNT_Y1 = 2345.0
+# Use stable, human-readable operating assumptions for baseline physics.
+EMC_HOURS_PER_DAY_Y1 = 11.0
+EMC_DAYS_PER_YEAR_Y1 = 365.0
+
 NS_MAIN = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
 
 
@@ -96,8 +117,8 @@ def _owner_net_savings_min_rmb(
 def select_10_tiers(*, baseline) -> list[TierSpec]:
     """Pick 10 scenarios that satisfy BOTH provider constraints and owner net savings > 0 under template metric."""
     # Inputs for owner metric (see fill_one_tier comments).
-    emc_saving = 0.50
-    elec_post_y1 = float(baseline.electricity_opex_rmb_y.get(1))
+    emc_saving = float(EMC_SAVING_FRAC)
+    elec_post_y1 = float(EMC_AFTER_ELEC_FEE_Y1_RMB)
     cash_y1 = float(baseline.cash_opex_rmb_y.get(1))
     other_y1 = max(0.0, cash_y1 - elec_post_y1)
     elec_pre_y1 = float(elec_post_y1 / max(1e-9, (1.0 - emc_saving)))
@@ -112,14 +133,16 @@ def select_10_tiers(*, baseline) -> list[TierSpec]:
         ("Tier01_UniformAI_80", 10, "uniform_pct", 0.80, 0.0, 0.0),
         ("Tier02_UniformAI_85", 10, "uniform_pct", 0.85, 0.0, 0.0),
         ("Tier03_ElecOnly_85", 10, "electricity_only_pct", 0.85, 0.0, 0.0),
-        ("Tier04_ElecOnly_85_Upfront300k", 10, "electricity_only_pct", 0.85, 300_000.0, 0.0),
+        # Keep an “upfront” style tier, but cap it lower so provider cumulative still beats EMC under fee_cap_vs_emc.
+        ("Tier04_ElecOnly_85_Upfront100k", 10, "electricity_only_pct", 0.85, 100_000.0, 0.0),
         # Tier05 no longer uses a dedicated “AI+solar mode”; solar becomes a product type (see product_key).
         ("Tier05_UniformAI_75", 10, "uniform_pct", 0.75, 0.0, 0.0),
         ("Tier06_Upfront_Prepay", 10, "uniform_pct", 0.85, 1_000_000.0, 0.0),
         ("Tier07_TailDiscount", 10, "uniform_pct", 0.85, 0.0, 250_000.0),
         ("Tier08_HigherFee_StrongerSLA", 10, "uniform_pct", 0.85, 0.0, 350_000.0),
         ("Tier09_MidTerm_8y", 8, "uniform_pct", 0.85, 500_000.0, 0.0),
-        ("Tier10_Conservative", 10, "uniform_pct", 0.70, 0.0, 0.0),
+        # Conservative but must still beat EMC on provider cumulative under fee cap.
+        ("Tier10_Conservative", 10, "uniform_pct", 0.75, 0.0, 0.0),
     ]
 
     picked: list[TierSpec] = []
@@ -130,11 +153,20 @@ def select_10_tiers(*, baseline) -> list[TierSpec]:
     ]
     for i, (name, term, mode, red, upfront, tail) in enumerate(mech):
         product_key = product_cycle[i % len(product_cycle)]
+        # Ensure the “upfront-style” tier still beats EMC even under fee_cap_vs_emc by giving it
+        # the strongest OPEX advantage (solar/off-grid eliminates electricity OPEX in our product overlay).
+        if name.startswith("Tier04_"):
+            product_key = "AI_plus_solar_offgrid"
         s_rate = saving_rate_for(mode, red)
         # Owner-positivity implies an upper bound on annual fee (ignoring retained mgmt which we set to 0):
         fee_max_owner = float(other_y1 + elec_pre_y1 * s_rate) - 1.0
         fee_min = 200_000.0
-        fee_max = max(fee_min, min(3_000_000.0, fee_max_owner))
+        # IMPORTANT: if user toggles `02_Inputs!D35=1` (服务商承担电费), then for BOTH EMC and LaaS
+        # the owner electricity outflow becomes 0 in the template. In that case, owner's annual spend
+        # is dominated by the annual service fee. To preserve the narrative goal “LaaS reduces owner spend”
+        # even under D35=1, enforce LaaS annual fee < EMC annual fee.
+        fee_cap_vs_emc = float(EMC_FEE_Y1_RMB_FIXED) - 1.0
+        fee_max = max(fee_min, min(3_000_000.0, fee_max_owner, fee_cap_vs_emc))
 
         best = None
         # Scan feasible fee range with 10k step; keep best provider NPV.
@@ -504,6 +536,50 @@ def _validate_cached_kpis(xlsx_path: Path) -> None:
     for addr in ("C15", "C16", "C17", "D15", "D16", "D17"):
         s = snip("00_LaaS收益来源", addr)
         assert _has_f_v(s), addr
+    # Incremental bridge table (cached for WPS): EMC/LaaS columns + delta column.
+    for addr in (
+        "C6",
+        "C7",
+        "C8",
+        "C9",
+        "C10",
+        "C11",
+        "C18",
+        "D18",
+        "E18",
+        "C19",
+        "D19",
+        "E19",
+        "C20",
+        "D20",
+        "E20",
+        "C21",
+        "D21",
+        "E21",
+        "C22",
+        "D22",
+        "E22",
+        "C23",
+        "D23",
+        "E23",
+        "C24",
+        "D24",
+        "E24",
+        "C25",
+        "D25",
+        "E25",
+        "C26",
+        "D26",
+        "E26",
+        "C27",
+        "D27",
+        "E27",
+        "C28",
+        "D28",
+        "E28",
+    ):
+        s = snip("00_LaaS收益来源", addr)
+        assert _has_f_v(s), addr
     z.close()
 
 
@@ -522,14 +598,17 @@ def fill_one_tier(
     # The reference template’s baseline rows (`05_Annual_Model` row6/8) represent the *pre-saving* baseline,
     # and apply saving rates afterwards (see `04_Mode_Params` row9). Therefore we back-calculate:
     # baseline_pre_elec = post_elec / (1 - emc_saving).
-    emc_saving = 0.50
-    elec_post_y1 = float(baseline.electricity_opex_rmb_y.get(1))
+    emc_saving = float(EMC_SAVING_FRAC)
+    elec_post_y1 = float(EMC_AFTER_ELEC_FEE_Y1_RMB)
     cash_y1 = float(baseline.cash_opex_rmb_y.get(1))
     other_y1 = max(0.0, cash_y1 - elec_post_y1)
     capex0 = float(baseline.capex_y0_rmb)
-    fee_y1 = float(baseline.revenue_rmb_y.get(1))
+    # `D7` is an owner-side budget cap (not used as provider revenue in our KPIs).
+    # Per user requirement, assume it is above EMC fee.
+    fee_y1 = float(OWNER_SERVICE_BUDGET_Y1_RMB)
     # Owner baseline physical spend in the template uses *pre-saving* electricity.
-    elec_pre_y1 = float(elec_post_y1 / max(1e-9, (1.0 - emc_saving)))
+    # Use user-provided baseline as anchor.
+    elec_pre_y1 = float(EMC_BASELINE_ELEC_FEE_Y1_RMB)
     baseline_owner_cost_y1 = float(elec_pre_y1 + other_y1)
 
     scenario = LaaSScenario(
@@ -561,12 +640,32 @@ def fill_one_tier(
         hypothesis_id="H_npv_irr_negative",
     )
 
-    phys = _calibrate_physics_to_baseline(fee_y1=fee_y1, elec_target=elec_pre_y1, om_target=other_y1)
-    lamps = float(phys["D6"])
-    watts = float(phys["D9"])
-    hours = float(phys["D10"])
-    days = float(phys["D11"])
-    baseline_kwh_y1 = float(lamps) * float(watts) / 1000.0 * float(hours) * float(days)
+    # ---------------------------------------------------------------------
+    # Baseline physics: force to user-provided baseline table anchors
+    # so `03_Baseline` matches the “baseline vs EMC” table exactly in WPS.
+    #
+    # Template formulas:
+    #   03_Baseline!D10 = lamps * watts/1000 * (hours_per_day * days_per_year)
+    #   03_Baseline!D12 = D10 * price_per_kwh
+    # We therefore derive watts from (baseline_kwh, lamps, hours/day, days/year).
+    # ---------------------------------------------------------------------
+    lamps = float(EMC_LIGHTS_COUNT_Y1)
+    hours = float(EMC_HOURS_PER_DAY_Y1)
+    days = float(EMC_DAYS_PER_YEAR_Y1)
+    baseline_kwh_y1 = float(EMC_BASELINE_KWH_Y1)
+    watts = float(baseline_kwh_y1 * 1000.0 / max(1e-9, (lamps * hours * days)))
+    price_per_kwh = float(EMC_BASELINE_ELEC_FEE_Y1_RMB / max(1e-9, baseline_kwh_y1))
+    owner_om_per_lamp = float(other_y1 / max(1e-9, lamps))
+
+    # `02_Inputs` cells referenced by `03_Baseline` formulas.
+    phys = {
+        "D6": float(lamps),
+        "D8": float(price_per_kwh),
+        "D9": float(watts),
+        "D10": float(hours),
+        "D11": float(days),
+        "D12": float(owner_om_per_lamp),
+    }
 
     shutil.copyfile(TEMPLATE, out_path)
     wb = load_workbook(out_path)
@@ -580,6 +679,10 @@ def fill_one_tier(
     for k, v in phys.items():
         ws_in[k] = v
 
+    # Add “poles count” for reporting (template does not use it in formulas).
+    ws_in["A49"] = "灯杆数量(根)"
+    ws_in["D49"] = float(EMC_POLES_COUNT_Y1)
+
     ws_in["D18"] = capex0 / lamps if lamps > 0 else 0.0
     tp, tpl, tsp = _split_non_elec_opex_components(
         # EMC cost components should represent non-electricity O&M (electricity handled separately by saving-rate rows).
@@ -591,7 +694,8 @@ def fill_one_tier(
     ws_in["D20"] = 0.0
     # Keep EMC savings at template default (0.50); enforce LaaS savings > EMC.
     ws_in["D21"] = float(emc_saving)
-    # User requirement: under EMC, electricity is borne by owner (业主承担电费).
+    # EMC assumption (fixed): owner always pays electricity under EMC.
+    # Keep EMC electricity-payer toggle independent from LaaS.
     ws_in["D25"] = 0
 
     capex_ref_per_lamp = capex0 / lamps if lamps > 0 else 0.0
@@ -604,6 +708,14 @@ def fill_one_tier(
         baseline_other_y1=other_y1,
         lamps=lamps,
     )
+
+    # Show poles count on `03_Baseline` (without shifting template rows/columns).
+    try:
+        ws_base = wb["03_Baseline"]
+        ws_base["F5"] = "灯杆数量(根)"
+        ws_base["G5"] = "='02_Inputs'!D49"
+    except Exception:
+        pass
     # Saving-rate baseline from product physics (PRODUCT_ROWS), then keep the existing narrative guardrails.
     try:
         d31 = max(float(d31), float(get_product_profile(tier.product_key).implied_grid_saving_rate()))  # type: ignore[arg-type]
@@ -741,8 +853,10 @@ def fill_one_tier(
             else:
                 c.alignment = Alignment(horizontal="center", vertical="center")
 
-    # EMC tuned fee (computed once in main; ensures positive & still inferior to LaaS).
-    ws_in["D19"] = float(emc_fee_y1_tuned)
+    # EMC fee (provider revenue under EMC) is fixed per user requirement.
+    ws_in["D19"] = float(EMC_FEE_Y1_RMB_FIXED)
+    # Ensure owner budget is above EMC fee.
+    ws_in["D7"] = float(OWNER_SERVICE_BUDGET_Y1_RMB)
 
     # Section header for commercial terms block (row 44, just above D45/D46).
     # Apply the same highlight style as the template's section headers.
@@ -867,6 +981,11 @@ def fill_one_tier(
     ws_ann["C26"].number_format = "0.00%"
     ws_ann["C53"].number_format = "0.00%"
 
+    # Escalation / growth knobs used by `_simulate_provider_cashflows` (defaults are usually 0 in template).
+    d14 = float(ws_in["D14"].value or 0.0)
+    d15 = float(ws_in["D15"].value or 0.0)
+    d16 = float(ws_in["D16"].value or 0.0)
+
     wb.save(out_path)
     wb.close()
 
@@ -884,7 +1003,8 @@ def fill_one_tier(
     owner_net_save = [baseline_spend_y1 - owner_outflow[i] for i in range(10)]
 
     # EMC owner-side annual cashflows (template rows 31/32/34/35):
-    trust_owner_pays_elec = 1 - int(ws_in["D25"].value or 0)  # D25=1 -> owner pays 0
+    # EMC assumption fixed: owner pays electricity (D25=0).
+    trust_owner_pays_elec = 1
     emc_elec = [float(elec_pre_y1) * (1.0 - float(emc_saving)) * float(trust_owner_pays_elec) for _y in range(1, 11)]
     emc_fee = [float(ws_in["D19"].value or ws_in["D7"].value or 0.0) for _y in range(1, 11)]
     emc_outflow = [emc_elec[i] + emc_fee[i] for i in range(10)]
@@ -948,6 +1068,55 @@ def fill_one_tier(
     def _fin(x: float) -> float:
         return 0.0 if x != x else float(x)
 
+    # ------------------------------------------------------------------
+    # `00_LaaS收益来源` narrative table: cache key “delta bridge” cells for WPS.
+    # These rows are formula-driven in the template; without cached <v>, openpyxl
+    # `data_only=True` reads blanks and the Streamlit viewer can't match Excel/WPS.
+    # ------------------------------------------------------------------
+    def _y1_provider_ops_cash_cost(*, pays_elec: int) -> tuple[float, float, float, float]:
+        """
+        Mirror `_simulate_provider_cashflows` cost split at Y=1:
+          cost = elec_post * pays_elec + om + plat + spare
+        where `baseline_elec_y1` passed into `_simulate_provider_cashflows` is the **post-retrofit**
+        baseline electricity OPEX anchor (see `fill_one_tier`: `baseline_elec_y1=elec_post_y1`).
+        """
+        y = 1
+        be = float(elec_post_y1) * (1.0 + float(d14)) ** max(0, y - 1)
+        post = be * (1.0 - float(d31))
+        elec_cost = post * float(pays_elec)
+        om_cost = float(lamps) * float(d32) * (1.0 + float(d15)) ** max(0, y - 1)
+        plat_cost = float(d33) * (1.0 + float(d15)) ** max(0, y - 1)
+        spare_cost = float(d34) * (1.0 + float(d15)) ** max(0, y - 1)
+        return float(elec_cost), float(om_cost), float(plat_cost), float(spare_cost)
+
+    def _y1_trust_ops_cash_cost(*, pays_elec: int) -> tuple[float, float, float, float]:
+        y = 1
+        be = float(elec_post_y1) * (1.0 + float(d14)) ** max(0, y - 1)
+        post = be * (1.0 - float(trust_saving))
+        elec_cost = post * float(pays_elec)
+        om_cost = float(lamps) * float(trust_per_lamp_om) * (1.0 + float(d15)) ** max(0, y - 1)
+        plat_cost = float(trust_plat) * (1.0 + float(d15)) ** max(0, y - 1)
+        spare_cost = float(trust_spare) * (1.0 + float(d15)) ** max(0, y - 1)
+        return float(elec_cost), float(om_cost), float(plat_cost), float(spare_cost)
+
+    emc_owner_spend_y1 = float(emc_owner_outflow_y1)
+    laas_owner_spend_y1 = float(laa_owner_outflow_y1)
+    emc_net_save_y1_tbl = float(baseline_owner_cost_y1 - emc_owner_spend_y1)
+    laas_net_save_y1_tbl = float(baseline_owner_cost_y1 - laas_owner_spend_y1)
+
+    emc_rev_y1 = float(trust_fee_y1) + float(trust_other_y1)
+    laas_rev_y1 = float(laa_fee_y1) + float(laa_other_y1)
+
+    emc_e1, emc_om1, emc_plat1, emc_spare1 = _y1_trust_ops_cash_cost(pays_elec=int(0))
+    laas_e1, laas_om1, laas_plat1, laas_spare1 = _y1_provider_ops_cash_cost(pays_elec=int(d35))
+
+    emc_cost_y1 = float(emc_e1 + emc_om1 + emc_plat1 + emc_spare1)
+    laas_cost_y1 = float(laas_e1 + laas_om1 + laas_plat1 + laas_spare1)
+    emc_nopat_cf_y1 = float(emc_rev_y1 - emc_cost_y1)
+    laas_nopat_cf_y1 = float(laas_rev_y1 - laas_cost_y1)
+
+    same_fee = bool(abs(float(laa_fee_y1) - float(trust_fee_y1)) < 1e-6)
+
     patch_workbook_cached_values(
         out_path,
         {
@@ -958,6 +1127,21 @@ def fill_one_tier(
                 "D32": float(d32),
                 "D33": float(d33),
                 "D34": float(d34),
+                # Electricity allocation toggles:
+                # - EMC fixed owner-pays: D25 = 0
+                # - LaaS toggle: D35 = d35
+                "D25": 0.0,
+                "D35": float(d35),
+            },
+            "03_Baseline": {
+                # Baseline sheet key rows are formula cells; cache so WPS shows them immediately.
+                "D10": float(EMC_BASELINE_KWH_Y1),
+                "D11": float(EMC_BASELINE_ELEC_FEE_Y1_RMB / max(1e-9, EMC_BASELINE_KWH_Y1)),
+                "D12": float(EMC_BASELINE_ELEC_FEE_Y1_RMB),
+                # D13 is owner O&M unit price; cache based on the calibrated D12 (owner_om_per_lamp) and lamps.
+                "D13": float(other_y1 / max(1e-9, lamps)),
+                "D14": float(other_y1),
+                "D15": float(EMC_BASELINE_ELEC_FEE_Y1_RMB + other_y1),
             },
             "00_LaaS收益来源": {
                 # Prevent WPS blanks in Tier5 (and others): cache key savings cells used by the first sheet narrative.
@@ -967,6 +1151,47 @@ def fill_one_tier(
                 "D15": float(d31),
                 "D16": float(baseline_kwh_y1 * float(d31)),
                 "D17": float(elec_pre_y1 * float(d31)),
+                # Snapshot table (template uses **column C** for the numeric “数值/状态”; column D is explanatory text).
+                "C6": float(lamps),
+                "C7": float(elec_pre_y1 / max(1e-9, float(EMC_BASELINE_KWH_Y1))),
+                "C8": float(EMC_BASELINE_ELEC_FEE_Y1_RMB),
+                "C9": float(other_y1),
+                "C10": float(OWNER_SERVICE_BUDGET_Y1_RMB),
+                "C11": 1.0 if same_fee else 0.0,
+                # Incremental bridge (template: C=EMC, D=LaaS, E=delta with mixed sign conventions per row)
+                "C18": float(emc_owner_spend_y1),
+                "D18": float(laas_owner_spend_y1),
+                "E18": float(emc_owner_spend_y1 - laas_owner_spend_y1),
+                "C19": float(emc_net_save_y1_tbl),
+                "D19": float(laas_net_save_y1_tbl),
+                "E19": float(laas_net_save_y1_tbl - emc_net_save_y1_tbl),
+                "C20": float(emc_rev_y1),
+                "D20": float(laas_rev_y1),
+                "E20": float(laas_rev_y1 - emc_rev_y1),
+                "C21": float(emc_cost_y1),
+                "D21": float(laas_cost_y1),
+                "E21": float(emc_cost_y1 - laas_cost_y1),
+                "C22": float(emc_om1),
+                "D22": float(laas_om1),
+                "E22": float(emc_om1 - laas_om1),
+                "C23": float(emc_plat1),
+                "D23": float(laas_plat1),
+                "E23": float(emc_plat1 - laas_plat1),
+                "C24": float(emc_nopat_cf_y1),
+                "D24": float(laas_nopat_cf_y1),
+                "E24": float(laas_nopat_cf_y1 - emc_nopat_cf_y1),
+                "C25": float(trust_capex),
+                "D25": float(laa_capex),
+                "E25": float(laa_capex - trust_capex),
+                "C26": _fin(trust_cum),
+                "D26": _fin(laa_cum),
+                "E26": _fin(laa_cum - trust_cum),
+                "C27": _fin(trust_npv),
+                "D27": _fin(laa_npv),
+                "E27": _fin(laa_npv - trust_npv),
+                "C28": _fin(trust_irr),
+                "D28": _fin(laa_irr),
+                "E28": _fin((laa_irr - trust_irr) if (isinstance(laa_irr, float) and isinstance(trust_irr, float)) else float("nan")),
             },
             "06_Sensitivity": {
                 # Row 19: LaaS owner net savings under electricity saving sensitivity (0.40..0.70)
@@ -976,7 +1201,7 @@ def fill_one_tier(
                 # Use net-of-prepay/tail Y1 payment (annual_rev[0]) so the row matches the annual model.
                 "B19": float((elec_pre_y1 + other_y1) - (elec_pre_y1 * (1 - 0.40) + float(annual_rev[0]) + 0.0)),
                 "C19": float((elec_pre_y1 + other_y1) - (elec_pre_y1 * (1 - 0.45) + float(annual_rev[0]) + 0.0)),
-                "D19": float((elec_pre_y1 + other_y1) - (elec_pre_y1 * (1 - 0.50) + float(annual_rev[0]) + 0.0)),
+                "D19": float((elec_pre_y1 + other_y1) - (elec_pre_y1 * (1 - float(emc_saving)) + float(annual_rev[0]) + 0.0)),
                 "E19": float((elec_pre_y1 + other_y1) - (elec_pre_y1 * (1 - 0.55) + float(annual_rev[0]) + 0.0)),
                 "F19": float((elec_pre_y1 + other_y1) - (elec_pre_y1 * (1 - 0.60) + float(annual_rev[0]) + 0.0)),
                 "G19": float((elec_pre_y1 + other_y1) - (elec_pre_y1 * (1 - 0.65) + float(annual_rev[0]) + 0.0)),
@@ -1139,65 +1364,7 @@ def main() -> None:
     baseline = build_baseline_energy_trust(parsed, analysis_years=10, discount_rate_annual=0.12)
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     tiers = select_10_tiers(baseline=baseline)
-    # Compute ONE tuned EMC fee that makes EMC positive but inferior to LaaS (owner savings).
-    emc_saving = 0.50
-    elec_post_y1 = float(baseline.electricity_opex_rmb_y.get(1))
-    cash_y1 = float(baseline.cash_opex_rmb_y.get(1))
-    other_y1 = max(0.0, cash_y1 - elec_post_y1)
-    elec_pre_y1 = float(elec_post_y1 / max(1e-9, (1.0 - emc_saving)))
-    baseline_owner_cost_y1 = float(elec_pre_y1 + other_y1)
-    # Minimum LaaS owner net savings in Y1 across the 10 tiers (conservative).
-    laa_saves_y1 = []
-    for t in tiers:
-        saving = 0.999 if t.opex_mode == "ai_plus_solar" else max(emc_saving + 0.03, float(t.ai_reduction_pct))
-        laa_outflow = float(elec_pre_y1 * (1.0 - saving) + float(t.annual_fee_rmb))
-        laa_saves_y1.append(float(baseline_owner_cost_y1 - laa_outflow))
-    min_laas_save_y1 = float(min(laa_saves_y1)) if laa_saves_y1 else 1.0
-    # Target EMC savings: positive but smaller than the worst LaaS tier.
-    target_emc_save_y1 = max(1.0, min_laas_save_y1 - 1_000.0)
-    emc_fee_cap_owner = float(other_y1 + elec_pre_y1 * emc_saving - 1.0)
-    emc_fee_y1 = float(other_y1 + elec_pre_y1 * emc_saving - target_emc_save_y1)
-    # Ensure in [0, cap]
-    emc_fee_y1 = max(0.0, min(emc_fee_cap_owner, emc_fee_y1))
-    # Ensure provider NPV/IRR positive by increasing fee if needed (but keep owner-positive & inferior).
-    # Note: this uses a simplified provider cashflow, consistent with our template mapping (owner pays elec).
-    lamps = 5000.0
-    per_lamp, plat, spare = _split_non_elec_opex_components(
-        lamps=lamps, target_total=other_y1, default_per_lamp=80.0, default_plat=150_000.0, default_spare=50_000.0
-    )
-    trust_capex = float(baseline.capex_y0_rmb)
-    while emc_fee_y1 <= emc_fee_cap_owner + 1e-6:
-        t_cf, _ = _simulate_provider_cashflows(
-            lamps=lamps,
-            model_years=10,
-            d14=0.0,
-            d15=0.0,
-            d16=0.0,
-            baseline_elec_y1=elec_post_y1,
-            baseline_om_y1=other_y1,
-            trust_saving=emc_saving,
-            trust_per_lamp_om=per_lamp,
-            trust_plat=plat,
-            trust_spare=spare,
-            trust_pays_elec=0,
-            laa_saving=emc_saving + 0.03,
-            laa_per_lamp_om=per_lamp,
-            laa_plat=plat,
-            laa_spare=spare,
-            laa_pays_elec=0,
-            trust_fee_y1=emc_fee_y1,
-            laa_fee_y1=emc_fee_y1,
-            trust_other_y1=0.0,
-            laa_other_y1=0.0,
-            trust_capex=trust_capex,
-            laa_capex=trust_capex,
-            laa_upfront_y0=0.0,
-        )
-        t_npv, t_irr, _ = _npv_irr_cumulative(disc=0.12, flows=t_cf)
-        if (t_npv > 0) and (t_irr == t_irr) and (t_irr > 0):
-            break
-        emc_fee_y1 += 10_000.0
-    emc_fee_y1 = float(min(emc_fee_cap_owner, emc_fee_y1))
+    emc_fee_y1 = float(EMC_FEE_Y1_RMB_FIXED)
 
     for i, tier in enumerate(tiers, start=1):
         suffix = f"{i:02d}_{tier.name}"

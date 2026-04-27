@@ -52,6 +52,9 @@ def build_tier_tables(*, new_models_dir: Path) -> tuple[pd.DataFrame, pd.DataFra
                 "opex_om_per_lamp": t.opex_om_per_lamp,
                 "opex_platform": t.opex_platform,
                 "opex_spares": t.opex_spares,
+                "laas_opex_om_per_lamp": t.laas_opex_om_per_lamp,
+                "laas_opex_platform": t.laas_opex_platform,
+                "laas_opex_spares": t.laas_opex_spares,
                 "product_key": t.product_key,
                 # Provider KPIs
                 "emc_npv": t.emc_npv,
@@ -132,6 +135,9 @@ def tier_traceability_dict(t: TierExtract) -> dict:
             "opex_om_per_lamp": "02_Inputs!D22",
             "opex_platform": "02_Inputs!D23",
             "opex_spares": "02_Inputs!D24",
+            "laas_opex_om_per_lamp": "02_Inputs!D32",
+            "laas_opex_platform": "02_Inputs!D33",
+            "laas_opex_spares": "02_Inputs!D34",
             "product_key": "02_Inputs!D48",
         },
         "provider_cashflow_block": {
