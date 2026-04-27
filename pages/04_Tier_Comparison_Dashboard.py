@@ -138,7 +138,7 @@ def main() -> None:
         view_mode = st.radio("展示模式", options=["只看关键结论（1分钟版）", "展开明细（投委会版）"], index=0)
         show_all_years_table = st.checkbox("显示年度表格（像Excel）", value=(view_mode != "只看关键结论（1分钟版）"))
 
-    df_sum, df_long, tiers_dict = _load(new_models_dir, cache_bust="v12_authoritative_opex_inputs")
+    df_sum, df_long, tiers_dict = _load(new_models_dir, cache_bust="v17_add_provider_revenue_y1")
 
     if df_sum.empty:
         st.warning("No workbooks found. Check the folder path.")
@@ -274,7 +274,15 @@ def main() -> None:
         elec_pre_y1 = lamps * watts / 1000.0 * hpd * dpy * price if (lamps and watts and hpd and dpy and price) else 0.0
     elec_pre_y1 = float(elec_pre_y1 or 0.0)
     emc_save = _safe_float(dsel_view.get("emc_saving_rate"))
-    laas_save = _safe_float(dsel_view.get("laas_saving_rate"))
+    laas_save_raw = _safe_float(dsel_view.get("laas_saving_rate"))
+    # To align with the notebook’s “物理/产品口径” (e.g. AI_lightning_grid shows ~58.7%),
+    # cap LaaS saving rate by the product-implied bound.
+    # This ensures provider electricity cost under what-if matches the notebook table.
+    try:
+        laas_save_cap = float(get_product_profile(pk_sel).implied_grid_saving_rate())
+    except Exception:
+        laas_save_cap = laas_save_raw
+    laas_save = float(min(laas_save_raw, laas_save_cap))
     elec_emc_y = [elec_pre_y1 * (1.0 - emc_save)] * 10
     elec_laas_y = [elec_pre_y1 * (1.0 - laas_save)] * 10
 
@@ -341,7 +349,7 @@ def main() -> None:
 
         # Electricity block: always compute the post-saving electricity amount,
         # then decide whether it sits on provider cost side based on what-if toggle.
-        saving = float(dsel_view.get("laas_saving_rate") or 0.0) if kind == "laas" else float(dsel_view.get("emc_saving_rate") or 0.0)
+        saving = float(laas_save if kind == "laas" else float(dsel_view.get("emc_saving_rate") or 0.0))
         elec_after = [0.0] + [elec_pre_y1 * (1.0 - saving)] * 10
         if kind == "laas" and forces_grid_electricity_zero(pk_sel):
             elec_after = [0.0] * 11
@@ -365,7 +373,10 @@ def main() -> None:
             emc_fee_local = float(dsel.get("emc_fee_y1") or 0.0)
             fee = [0.0] + [emc_fee_local] * 10
 
-        other_income = [0.0] * 11
+        # Other income: align with template semantics (`02_Inputs!D20/D30`) as annual Y1..Y10 add-on.
+        # (Most tiers use 0, but keeping it avoids mismatch vs notebook tables.)
+        other_y1 = float(laa_other_y1 if kind == "laas" else trust_other_y1)
+        other_income = [0.0] + [other_y1] * 10
         asset_income = [0.0] * 11
 
         total_rev = [fee[i] + other_income[i] + asset_income[i] for i in range(11)]
@@ -401,13 +412,41 @@ def main() -> None:
 
     prov_emc = _compute_provider_block(kind="emc")
     prov_laas = _compute_provider_block(kind="laas")
-    _cum_emc = prov_emc.get("累计现金流") or []
-    _cum_laas = prov_laas.get("累计现金流") or []
-    provider_cum_net_cf_emc_y10 = float(_cum_emc[-1]) if _cum_emc else None
-    provider_cum_net_cf_laas_y10 = float(_cum_laas[-1]) if _cum_laas else None
+
+    # Cum cashflow (Y10) has two “truths”:
+    # - Workbook cached (`01_Dashboard!C18/D18`): reflects workbook default electricity flags (static unless Excel recalcs and you save).
+    # - What-if reconstructed (`prov_emc/prov_laas`): reflects sidebar electricity allocation toggles (dynamic).
+    provider_cum_net_cf_emc_cached = None
+    provider_cum_net_cf_laas_cached = None
+    try:
+        wb_kpi = load_workbook(str(dsel["file_path"]), data_only=True, read_only=True)
+        ws_dash = wb_kpi["01_Dashboard"]
+        provider_cum_net_cf_emc_cached = _safe_float(ws_dash["C18"].value, default=None)  # type: ignore[arg-type]
+        provider_cum_net_cf_laas_cached = _safe_float(ws_dash["D18"].value, default=None)  # type: ignore[arg-type]
+        wb_kpi.close()
+    except Exception:
+        pass
+
+    _cum_emc_whatif = prov_emc.get("累计现金流") or []
+    _cum_laas_whatif = prov_laas.get("累计现金流") or []
+    provider_cum_net_cf_emc_whatif = float(_cum_emc_whatif[-1]) if _cum_emc_whatif else None
+    provider_cum_net_cf_laas_whatif = float(_cum_laas_whatif[-1]) if _cum_laas_whatif else None
+
+    if emc_provider_pays_elec or laas_provider_pays_elec:
+        provider_cum_net_cf_emc_y10 = provider_cum_net_cf_emc_whatif
+        provider_cum_net_cf_laas_y10 = provider_cum_net_cf_laas_whatif
+    else:
+        provider_cum_net_cf_emc_y10 = provider_cum_net_cf_emc_cached
+        provider_cum_net_cf_laas_y10 = provider_cum_net_cf_laas_cached
+
+    # Final fallback (should be rare): if cached is missing and toggles are default, fall back to what-if block.
+    if provider_cum_net_cf_emc_y10 is None:
+        provider_cum_net_cf_emc_y10 = provider_cum_net_cf_emc_whatif
+    if provider_cum_net_cf_laas_y10 is None:
+        provider_cum_net_cf_laas_y10 = provider_cum_net_cf_laas_whatif
 
     def _provider_net_cf_y0_to_y10(*, kind: str) -> list[float]:
-        saving = float(dsel_view.get("laas_saving_rate") or 0.0) if kind == "laas" else float(dsel_view.get("emc_saving_rate") or 0.0)
+        saving = float(laas_save if kind == "laas" else float(dsel_view.get("emc_saving_rate") or 0.0))
         elec_after_y = [float(elec_pre_y1) * (1.0 - saving)] * 10
         if kind == "laas" and forces_grid_electricity_zero(pk_sel):
             elec_after_y = [0.0] * 10
@@ -443,14 +482,36 @@ def main() -> None:
     else:
         k2.metric("服务商 IRR（EMC → LaaS）", f"{_pct(dsel.get('emc_irr'))} → {_pct(dsel.get('laas_irr'))}")
     k3.metric("业主净节省 Y1（EMC → LaaS）", f"{_money(owner_save_emc_y1_card)} → {_money(owner_save_laas_y1_card)}")
-    k4.metric(
-        "10年累计净现金流（服务商，至Y10｜EMC → LaaS）",
-        f"{_money(provider_cum_net_cf_emc_y10)} → {_money(provider_cum_net_cf_laas_y10)}",
+    cum_delta = (
+        float(provider_cum_net_cf_laas_y10) - float(provider_cum_net_cf_emc_y10)
+        if (provider_cum_net_cf_emc_y10 is not None and provider_cum_net_cf_laas_y10 is not None)
+        else None
     )
-    k4.caption(
-        "口径：**服务商**视角；为 Y0..Y10 年度净现金流累加（与下方对比表中的「累计现金流」列、以及累计现金流图一致）。"
-        "Y0 含 CAPEX 流出；电费成本是否计入服务商侧随侧边栏电费承担 what-if。"
-    )
+    if emc_provider_pays_elec or laas_provider_pays_elec:
+        k4.metric(
+            "10年累计净现金流（服务商，至Y10｜EMC → LaaS）",
+            f"{_money(provider_cum_net_cf_emc_y10)} → {_money(provider_cum_net_cf_laas_y10)}",
+        )
+        k4.caption("注：此处为侧边栏 what-if 口径（电费承担开关会影响服务商侧电费成本）。")
+    else:
+        k4.metric(
+            "10年累计净现金流（服务商，至Y10｜EMC / LaaS / Δ）",
+            f"{_money(provider_cum_net_cf_emc_y10)} → {_money(provider_cum_net_cf_laas_y10)}（Δ { _money(cum_delta) }）",
+        )
+        k4.caption(
+            "口径：读取工作簿缓存：`01_Dashboard!C18/D18`（与 notebook/Excel 默认展示一致）。"
+        )
+
+    # Provider revenue headline (Y1): matches notebook “服务商年度收入合计”
+    r1, r2 = st.columns(2)
+    try:
+        rev_emc_y1 = float((prov_emc.get("年度总收入") or [0.0] * 11)[1])
+        rev_laas_y1 = float((prov_laas.get("年度总收入") or [0.0] * 11)[1])
+    except Exception:
+        rev_emc_y1 = None
+        rev_laas_y1 = None
+    r1.metric("服务商年度收入合计 Y1（EMC）", _money(rev_emc_y1))
+    r2.metric("服务商年度收入合计 Y1（LaaS）", _money(rev_laas_y1))
 
     st.caption(f"工作簿路径：`{dsel['file_path']}`（数据来自该工作簿缓存值，便于审计与对齐WPS）")
 

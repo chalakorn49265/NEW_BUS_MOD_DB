@@ -24,8 +24,8 @@ TIER_DEFAULTS: dict[str, tuple[float, float, float, float, float]] = {
 # Off-grid solar: no grid purchases → delivered_f = 0 → 100% implied savings vs grid baseline.
 PRODUCT_ROWS: dict[str, tuple[int, int, int, float, float, float, float, float, float, float, int, float, float]] = {
     "AI_lightning_grid": (1, 1, 0, 200, 60, 50, 45, 30, 1.20, 0, 0, 0.95, 2.30),
-    # Battery product reduces emergency dispatch / outage handling; routine_maint factor slightly LOWER than lighting-only.
-    "AI_battery_integrated_grid": (1, 1, 1, 230, 60, 50, 50, 32, 1.10, 40, 72, 0.85, 2.40),
+    # Battery product adds system complexity (BMS/thermal/power electronics) → routine maintenance should be HIGHER than lighting-only.
+    "AI_battery_integrated_grid": (1, 1, 1, 230, 60, 50, 50, 32, 1.35, 40, 72, 0.85, 2.40),
     "AI_plus_solar_offgrid": (0, 0, 1, 280, 0, 0, 50, 35, 1.00, 70, 72, 0.0, 2.60),
 }
 
