@@ -1,0 +1,182 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://local.invalid/schemas/project_capex_pack.v2026_01.schema.json",
+  "title": "ProjectCAPEXPack",
+  "description": "Sales intake payload: CAPEX triplet (Phase 1) plus optional OPEX/O&M for dashboards (Phase 2). Currency amounts are in major units unless noted.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "identity", "capex_triplet", "scale"],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "2026.01"
+    },
+    "identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["project_id", "client_name", "country"],
+      "properties": {
+        "project_id": { "type": "string", "minLength": 1 },
+        "client_name": { "type": "string", "minLength": 1 },
+        "country": { "type": "string", "minLength": 1 },
+        "submitted_by": { "type": "string" },
+        "submitted_at": { "type": "string", "description": "ISO 8601 date-time preferred" },
+        "sales_region": { "type": "string", "description": "Internal region label (e.g. CN-East)" },
+        "source_system": {
+          "type": "string",
+          "description": "e.g. feishu_form_v1"
+        }
+      }
+    },
+    "capex_triplet": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["capex_ours", "capex_baseline_incumbent", "capex_normal_led"],
+      "properties": {
+        "capex_ours": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Total CAPEX for our (AI / company) solution"
+        },
+        "capex_baseline_incumbent": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Total CAPEX representing incumbent / legacy baseline"
+        },
+        "capex_normal_led": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Total CAPEX for conventional LED retrofit benchmark"
+        },
+        "currency": {
+          "type": "string",
+          "default": "USD",
+          "description": "ISO 4217 code"
+        },
+        "fx_rate_to_usd": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Multiply local currency amounts to USD when currency != USD"
+        },
+        "inclusions_scope": {
+          "type": "string",
+          "description": "What is included in each CAPEX line (fixtures, civil, controls)"
+        },
+        "confidence": {
+          "type": "string",
+          "enum": ["high", "medium", "low"]
+        },
+        "source": {
+          "type": "string",
+          "enum": ["client_quote", "internal_estimate", "benchmark_table", "other"]
+        }
+      }
+    },
+    "scale": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["number_of_lights"],
+      "properties": {
+        "number_of_lights": { "type": "integer", "minimum": 1 },
+        "number_of_poles": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "attachments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["storage_uri", "kind"],
+        "properties": {
+          "storage_uri": { "type": "string", "description": "OSS/COS URI or internal handle" },
+          "kind": {
+            "type": "string",
+            "enum": ["quote", "boq", "utility_bill", "photo", "other"]
+          },
+          "filename": { "type": "string" }
+        }
+      }
+    },
+    "opex_annual_by_scenario": {
+      "type": "object",
+      "description": "Phase 2: annual operating cost by scenario (same scope across scenarios).",
+      "additionalProperties": false,
+      "properties": {
+        "baseline": { "$ref": "#/$defs/annual_opex_block" },
+        "normal_led": { "$ref": "#/$defs/annual_opex_block" },
+        "emc": { "$ref": "#/$defs/annual_opex_block" },
+        "laas": { "$ref": "#/$defs/annual_opex_block" }
+      }
+    },
+    "maintenance_breakdown_by_scenario": {
+      "type": "object",
+      "description": "Phase 2: 运维费 line items; use same keys per scenario for stable charts.",
+      "additionalProperties": false,
+      "properties": {
+        "baseline": { "$ref": "#/$defs/maintenance_breakdown" },
+        "normal_led": { "$ref": "#/$defs/maintenance_breakdown" },
+        "emc": { "$ref": "#/$defs/maintenance_breakdown" },
+        "laas": { "$ref": "#/$defs/maintenance_breakdown" }
+      }
+    },
+    "commercial_laas": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Optional LaaS subscription inputs for payback / cashflow sketches.",
+      "properties": {
+        "term_years": { "type": "integer", "minimum": 1, "maximum": 40 },
+        "annual_service_fee": { "type": "number", "minimum": 0 },
+        "upfront_payment": { "type": "number", "minimum": 0 },
+        "escalation_pct_annual": { "type": "number", "minimum": -0.2, "maximum": 0.5 },
+        "currency": { "type": "string", "default": "USD" }
+      }
+    },
+    "calculated_kpis": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Optional mirrored KPIs from sales spreadsheet (payback, IRR, NPV).",
+      "properties": {
+        "payback_years": { "type": "number", "minimum": 0 },
+        "irr_annual": { "type": "number" },
+        "npv": { "type": "number" },
+        "notes": { "type": "string" }
+      }
+    },
+    "messaging_constraints": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "do_not_show_client": { "type": "string" },
+        "preferred_currency_display": { "type": "string" }
+      }
+    }
+  },
+  "$defs": {
+    "annual_opex_block": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "total_annual": { "type": "number", "minimum": 0 },
+        "electricity_annual": { "type": "number", "minimum": 0 },
+        "non_electric_annual": { "type": "number", "minimum": 0 }
+      }
+    },
+    "maintenance_breakdown": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "labor": { "type": "number", "minimum": 0 },
+        "materials": { "type": "number", "minimum": 0 },
+        "other": { "type": "number", "minimum": 0 },
+        "total_om": { "type": "number", "minimum": 0 },
+        "inspection": { "type": "number", "minimum": 0 },
+        "cleaning": { "type": "number", "minimum": 0 },
+        "testing": { "type": "number", "minimum": 0 },
+        "platform_software": { "type": "number", "minimum": 0 },
+        "spares": { "type": "number", "minimum": 0 },
+        "battery_reserve": { "type": "number", "minimum": 0 },
+        "currency": { "type": "string", "default": "USD" }
+      }
+    }
+  }
+}

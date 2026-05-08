@@ -1,0 +1,24 @@
+{
+  "schema_version": "2026.01",
+  "identity": {
+    "project_id": "demo-001",
+    "client_name": "Example Municipality",
+    "country": "CN",
+    "submitted_by": "sales_rep",
+    "submitted_at": "2026-05-08T12:00:00+08:00",
+    "source_system": "manual_test"
+  },
+  "capex_triplet": {
+    "capex_ours": 3000000,
+    "capex_baseline_incumbent": 800000,
+    "capex_normal_led": 1200000,
+    "currency": "USD",
+    "confidence": "medium",
+    "source": "internal_estimate",
+    "inclusions_scope": "Fixtures + install; excludes civil works beyond standard."
+  },
+  "scale": {
+    "number_of_lights": 1000,
+    "number_of_poles": 1000
+  }
+}

@@ -1,0 +1,100 @@
+{
+  "schema_version": "2026.01",
+  "identity": {
+    "project_id": "demo-002",
+    "client_name": "Example Client",
+    "country": "CN",
+    "submitted_by": "sales_rep",
+    "submitted_at": "2026-05-08T12:00:00+08:00",
+    "source_system": "feishu_form_v1"
+  },
+  "capex_triplet": {
+    "capex_ours": 3000000,
+    "capex_baseline_incumbent": 500000,
+    "capex_normal_led": 1100000,
+    "currency": "USD",
+    "confidence": "high",
+    "source": "client_quote"
+  },
+  "scale": {
+    "number_of_lights": 1000
+  },
+  "opex_annual_by_scenario": {
+    "baseline": {
+      "total_annual": 450000,
+      "electricity_annual": 350000,
+      "non_electric_annual": 100000
+    },
+    "normal_led": {
+      "total_annual": 280000,
+      "electricity_annual": 180000,
+      "non_electric_annual": 100000
+    },
+    "emc": {
+      "total_annual": 260000,
+      "electricity_annual": 160000,
+      "non_electric_annual": 100000
+    },
+    "laas": {
+      "total_annual": 620000,
+      "electricity_annual": 0,
+      "non_electric_annual": 620000
+    }
+  },
+  "maintenance_breakdown_by_scenario": {
+    "baseline": {
+      "labor": 40000,
+      "materials": 30000,
+      "other": 10000,
+      "total_om": 80000,
+      "inspection": 5000,
+      "cleaning": 5000,
+      "testing": 5000
+    },
+    "normal_led": {
+      "labor": 35000,
+      "materials": 25000,
+      "other": 8000,
+      "total_om": 68000,
+      "inspection": 4000,
+      "cleaning": 4000,
+      "testing": 4000
+    },
+    "emc": {
+      "labor": 33000,
+      "materials": 24000,
+      "other": 7000,
+      "total_om": 64000,
+      "inspection": 4000,
+      "cleaning": 3500,
+      "testing": 3500,
+      "platform_software": 12000,
+      "spares": 8000
+    },
+    "laas": {
+      "labor": 120000,
+      "materials": 80000,
+      "other": 20000,
+      "total_om": 280000,
+      "inspection": 30000,
+      "cleaning": 10000,
+      "testing": 15000,
+      "platform_software": 90000,
+      "spares": 75000,
+      "battery_reserve": 40000
+    }
+  },
+  "commercial_laas": {
+    "term_years": 10,
+    "annual_service_fee": 600000,
+    "upfront_payment": 0,
+    "escalation_pct_annual": 0.03,
+    "currency": "USD"
+  },
+  "calculated_kpis": {
+    "payback_years": 6.2,
+    "irr_annual": 0.14,
+    "npv": 450000,
+    "notes": "Illustrative — validate against finance model."
+  }
+}
