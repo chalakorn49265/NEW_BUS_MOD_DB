@@ -46,10 +46,10 @@ section,metric,value_1,value_2,value_3,notes
 4 Theoretical before vs after retrofit (Sheet 汇总表),After retrofit — scenario A annual energy (replacement wattages only),946430.4,,kWh,40/80/100/200/120 W rows
 4 Theoretical before vs after retrofit (Sheet 汇总表),After retrofit — scenario A bill @ 0.72 (derived),681430.03,,CNY,946430.4 * 0.72
 4 Theoretical before vs after retrofit (Sheet 汇总表),After retrofit — scenario B annual energy (替换功率 dimmed column),671716.8,,kWh,
-4 Theoretical before vs after retrofit (Sheet 汇总表),After retrofit — footer stated kWh × 0.72 (= agg_savings_fee_total in retrofit CSV),412618.464,,CNY,573081.2 kWh footer × 0.72; savings-line fee sum remains 483636.096
+4 Theoretical before vs after retrofit (Sheet 汇总表),Annual savings fee (节费) footer_after_kWh × 0.72 (= agg_savings_fee_total),412618.464,,CNY,896254.56 − 483636.096; NOT survey column「改造后电费」(that sum = 483636.096)
 4 Theoretical before vs after retrofit (Sheet 汇总表),Energy saving rate vs 1244796 → 946430.4,0.239690358902182,,,~23.97% (~24%)
 4 Theoretical before vs after retrofit (Sheet 汇总表),Energy saving rate vs 1244796 → 671716.8,0.4603800140745953,,,~46.04% (~46%)
-4 Theoretical before vs after retrofit (Sheet 汇总表),Bill ratio after/before @ 0.72 (896254.56 → 412618.464),0.4603808810746804,,,after_bill/before_bill; annual savings fee sum still 483636.096
+4 Theoretical before vs after retrofit (Sheet 汇总表),Bill ratio remaining footer_after/footer_before @ 0.72 (412618.464 / 896254.56),0.4603808810746804,,,footer_after_kWh*λ / footer_before_kWh*λ; survey「改造后电费」column sum = 483636.096 CNY
 4 Theoretical before vs after retrofit (Sheet 汇总表),Total replacement cost (last column sum in block),941330,,,Currency as in file; treat as CNY unless confirmed
 4 Theoretical before vs after retrofit (Sheet 汇总表),Unlabeled dense-column calc cells (interpret with care),112.6;141.5;117.6;0.20323129251700686;2.4330463669665217,,,"Possible payback/ratio outputs; confirm headers in source Excel"
 5 Reconciliation vs narrative Word deck (~1.245M / 0.672M / 46%),XLS ~46% ties to theoretical bill 896253 → 483636 CNY and 671717 kWh scenario,,,,"Not the simple ratio 1.245M vs 0.672M kWh from narrative deck alone"

@@ -1,5 +1,5 @@
 record_type,row_id,luminaire_type_zh,luminaire_type_en,power_w,qty_units,hours_per_year,annual_kwh_theoretical,delta_power_w,annual_kwh_saved_line,tariff_cny_per_kwh,annual_fee_cny,unit_capex_cny,line_capex_cny,ratio_name,ratio_value,currency,om_component_zh,om_cny_per_lamp_year,om_annual_total_cny,notes
-meta,meta_01,文成隧道路灯改造测算,,,,,,,,,,,,,,CNY,,,,source=user spreadsheet; tariff=0.72 CNY/kWh; annual_kWh_saved lines match savings block screenshot (sum 671716.8 kWh/yr); retrofit_after kWh = same-row before_kWh minus saved_kWh; stated_footer_after_kWh = footer_before_kWh - sum(saved_kWh); reconcile when line-sum before != footer before (same as agg_before).
+meta,meta_01,文成隧道路灯改造测算,,,,,,,,,,,,,,CNY,,,,source=user spreadsheet; tariff=0.72 CNY/kWh; survey_column_retrofit_after_electricity_fee_cny = sum(savings_line annual_fee_cny) = saved_kWh_total * λ (~483636); annual_savings_fee_cny = footer_before_kWh*λ - that = footer_after_kWh*λ (~412618); retrofit_after kWh lines = before_kWh minus saved_kWh per row; stated_footer_after_kWh = footer_before_kWh - sum(saved_kWh); reconcile when line-sum before != footer before (same as agg_before).
 retrofit_before,before_01,专用公路LED隧道灯,LED tunnel (highway special),90,654,8760,515652,,,,,,,,,CNY,,,,
 retrofit_before,before_02,专用公路LED隧道灯,LED tunnel (highway special),100,182,8760,159432,,,,,,,,,CNY,,,,
 retrofit_before,before_03,专用公路LED隧道灯,LED tunnel (highway special),150,282,8760,370548,,,,,,,,,CNY,,,,
@@ -22,10 +22,11 @@ savings_line,save_03,,,,282,8760,,80,197625.6,0.72,142290.432,580,163560,,,CNY,,
 savings_line,save_04,,,,26,8760,,120,27331.2,0.72,19678.464,625,16250,,,CNY,,,,
 savings_line,save_05,,,,532,4380,,60,221452.8,0.72,159446.016,710,448720,,,CNY,,,,
 aggregate,agg_savings_kwh_total,,,,,,,,671716.8,,,,,stated_total_annual_kwh_saved_lines_sum,671716.8,CNY,,,,
-aggregate,agg_savings_fee_total,,,,,,,,,,412618.464,,,stated_after_retrofit_annual_fee_cny_footer_times_tariff,412618.464,CNY,,,,row_id historical name agg_savings_fee_total; value is footer_after_kWh * λ (after-retrofit bill). Sum of savings_line annual_fee_cny = 483636.096 CNY (savings vs before).
+aggregate,agg_line_sum_survey_retrofit_after_electricity_fee_cny,,,,,,,,,,483636.096,,,sum_savings_line_annual_fee_cny_survey_column_retrofit_after,483636.096,CNY,,,,收资表「改造后电费」列：分项节电量×λ 之和 (~483636)；改造前年电费−本项=footer_after_kWh*λ (~412618)=节费/现金流基数。
+aggregate,agg_savings_fee_total,,,,,,,,,,412618.464,,,stated_annual_savings_fee_cny_footer_after_kWh_times_tariff,412618.464,CNY,,,,"historical row_id agg_savings_fee_total: value = footer_after_kWh * λ = **annual savings (节费)** CNY/yr, NOT the survey「改造后电费」column (that is agg_line_sum_survey_retrofit_after_electricity_fee_cny). identity: footer_before*λ − line_sum_survey_retrofit_after = this row."
 aggregate,agg_capex_total,,,,,,,,,,,,941330,stated_total_retrofit_capex_cny,941330,CNY,,,,
 aggregate,agg_ratio_kwh_saved_footer_totals,,,,,,,,,,,,,delta_kWh_using_stated_before_after_totals,0.5396191189253197,CNY,,,,(1244798-573081.2)/1244798
-aggregate,agg_ratio_fee_saved_vs_theoretical_before_fee,,,,,,,,,,,,,fee_savings_vs_before_kWh_times_tariff,0.4603808810746804,CNY,,,,matches ~46pct narrative when baseline fee = footer_before_kWh * 0.72
+aggregate,agg_ratio_fee_saved_vs_theoretical_before_fee,,,,,,,,,,,,,footer_after_fee_over_footer_before_fee,0.4603808810746804,CNY,,,,(footer_after_kWh*λ)/(footer_before_kWh*λ)=remaining share of baseline bill after retrofit (~0.46); NOT sum(savings_line fees)/before.
 aggregate,agg_ratio_energy_saved_lines_vs_before_footer,,,,,,,,,,,,,annual_kWh_saved_sum_lines_div_before_kWh_footer,0.5396191189253197,CNY,,,,
 om_assumption,om_benchmark_rate,,,,,,,,,,,,,baseline_yuan_per_lamp_year_municipal_benchmark,120,CNY,,,,市政项目惯例口径，非本项目发票；用于测算基准
 om_assumption,om_lamp_count,,,,,,,,,,,,,total_lamps_assumed_same_as_retrofit_count,1676,CNY,,,,

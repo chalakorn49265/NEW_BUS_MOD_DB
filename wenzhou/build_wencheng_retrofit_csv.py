@@ -59,8 +59,9 @@ def main() -> None:
             currency="CNY",
             notes=(
                 "source=user spreadsheet; tariff=0.72 CNY/kWh; "
-                "annual_kWh_saved lines match savings block screenshot (sum 671716.8 kWh/yr); "
-                "retrofit_after kWh = same-row before_kWh minus saved_kWh; "
+                "survey_column_retrofit_after_electricity_fee_cny = sum(savings_line annual_fee_cny) = saved_kWh_total * λ (~483636); "
+                "annual_savings_fee_cny = footer_before_kWh*λ - that = footer_after_kWh*λ (~412618); "
+                "retrofit_after kWh lines = before_kWh minus saved_kWh per row; "
                 "stated_footer_after_kWh = footer_before_kWh - sum(saved_kWh); "
                 "reconcile when line-sum before != footer before (same as agg_before)."
             ),
@@ -279,8 +280,8 @@ def main() -> None:
         )
 
     total_fee_saved = total_saved_kwh * lam
-    # 表尾「改造后」年应付电费 = 表尾改造后 kWh × λ（与仪表板现金流口径一致，例 412,618.464 @ 0.72）
-    after_annual_fee_footer = round(float(footer_after) * lam, 6)
+    # 表尾改造后年用电量×λ = 年节费（少付）= 改造前电费 − 分项「改造后电费」合计（非「换灯后应付账单」物理量）
+    annual_savings_fee_footer_basis = round(float(footer_after) * lam, 6)
     rows.append(
         cells(
             record_type="aggregate",
@@ -294,16 +295,29 @@ def main() -> None:
     rows.append(
         cells(
             record_type="aggregate",
-            row_id="agg_savings_fee_total",
-            annual_fee_cny=after_annual_fee_footer,
-            ratio_name="stated_after_retrofit_annual_fee_cny_footer_times_tariff",
-            ratio_value=after_annual_fee_footer,
+            row_id="agg_line_sum_survey_retrofit_after_electricity_fee_cny",
+            annual_fee_cny=round(total_fee_saved, 6),
+            ratio_name="sum_savings_line_annual_fee_cny_survey_column_retrofit_after",
+            ratio_value=round(total_fee_saved, 6),
             currency="CNY",
             notes=(
-                "row_id historical name agg_savings_fee_total; value is footer_after_kWh * λ (after-retrofit bill). "
-                "Sum of savings_line annual_fee_cny = "
-                + str(round(total_fee_saved, 6))
-                + " CNY (savings vs before)."
+                "收资表「改造后电费」列：分项节电量×λ 之和 (~483636)；"
+                "改造前年电费−本项=footer_after_kWh*λ (~412618)=节费/现金流基数。"
+            ),
+        )
+    )
+    rows.append(
+        cells(
+            record_type="aggregate",
+            row_id="agg_savings_fee_total",
+            annual_fee_cny=annual_savings_fee_footer_basis,
+            ratio_name="stated_annual_savings_fee_cny_footer_after_kWh_times_tariff",
+            ratio_value=annual_savings_fee_footer_basis,
+            currency="CNY",
+            notes=(
+                "historical row_id agg_savings_fee_total: value = footer_after_kWh * λ = **annual savings (节费)** CNY/yr, "
+                "NOT the survey「改造后电费」column (that is agg_line_sum_survey_retrofit_after_electricity_fee_cny). "
+                "identity: footer_before*λ − line_sum_survey_retrofit_after = this row."
             ),
         )
     )
@@ -320,8 +334,8 @@ def main() -> None:
 
     before_fee_footer = float(footer_before) * lam
     ratio_delta_kwh = (footer_before - footer_after) / footer_before
-    # 与旧版一致：after_bill / before_bill（约 0.46 = 改造后应付占改造前电费比例）
-    ratio_fee_saved_vs_before_fee = after_annual_fee_footer / before_fee_footer
+    # 表尾剩余电量对应电费 / 改造前电费 ≈ 0.46（剩余负荷占比）；节费占比 = 1 − 本值（≈0.54）
+    ratio_remaining_footer_fee_vs_before = annual_savings_fee_footer_basis / before_fee_footer
 
     rows.append(
         cells(
@@ -337,10 +351,13 @@ def main() -> None:
         cells(
             record_type="aggregate",
             row_id="agg_ratio_fee_saved_vs_theoretical_before_fee",
-            ratio_name="fee_savings_vs_before_kWh_times_tariff",
-            ratio_value=ratio_fee_saved_vs_before_fee,
+            ratio_name="footer_after_fee_over_footer_before_fee",
+            ratio_value=ratio_remaining_footer_fee_vs_before,
             currency="CNY",
-            notes="matches ~46pct narrative when baseline fee = footer_before_kWh * 0.72",
+            notes=(
+                "(footer_after_kWh*λ)/(footer_before_kWh*λ)=remaining share of baseline bill after retrofit (~0.46); "
+                "NOT sum(savings_line fees)/before."
+            ),
         )
     )
     rows.append(
