@@ -1,0 +1,57 @@
+section,metric,value_1,value_2,value_3,notes
+1 Inventory and tariffs (Sheet 隧道灯具情况统计),Total luminaires (tunnel + street),1676,,,units
+1 Inventory and tariffs (Sheet 隧道灯具情况统计),Total nameplate power (table subtotal),189.5,,kW,"Buckets sum to 27.7 + 18.2 + 137.1 + 6.5 kW"
+1 Inventory and tariffs (Sheet 隧道灯具情况统计),Street lighting subtotal power,94.8,,kW,
+1 Inventory and tariffs (Sheet 隧道灯具情况统计),Tunnel lighting subtotal power,94.7,,kW,
+1 Inventory and tariffs (Sheet 隧道灯具情况统计),Stated average tariff,0.72,,CNY/kWh,
+1 Inventory and tariffs (Sheet 隧道灯具情况统计),Paid electricity (free-text row 2024),1391276.9,,CNY,"Differs from summed invoices below; use invoice totals for reconciliation"
+1 Inventory and tariffs (Sheet 隧道灯具情况统计),Paid electricity (free-text row 2025),691945.95,,CNY,
+2 Actual billed electricity — Tunnels 上岙岭 + 文青公路光明李山 (Sheet 用电详情财务账单),Year 2024 energy,552953,,kWh,
+2 Actual billed electricity — Tunnels 上岙岭 + 文青公路光明李山 (Sheet 用电详情财务账单),Year 2024 cost,424350.52,,CNY,
+2 Actual billed electricity — Tunnels 上岙岭 + 文青公路光明李山 (Sheet 用电详情财务账单),Year 2024 blended price,0.7674,,CNY/kWh,
+2 Actual billed electricity — Tunnels 上岙岭 + 文青公路光明李山 (Sheet 用电详情财务账单),Year 2025 energy,573446,,kWh,
+2 Actual billed electricity — Tunnels 上岙岭 + 文青公路光明李山 (Sheet 用电详情财务账单),Year 2025 cost,412744.11,,CNY,
+2 Actual billed electricity — Tunnels 上岙岭 + 文青公路光明李山 (Sheet 用电详情财务账单),Year 2025 blended price,0.7198,,CNY/kWh,
+2 Actual billed electricity — Street 精品公路路灯高压专变 (Sheet 用电详情财务账单),Year 2024 energy,372259,,kWh,
+2 Actual billed electricity — Street 精品公路路灯高压专变 (Sheet 用电详情财务账单),Year 2024 cost,287452.62,,CNY,
+2 Actual billed electricity — Street 精品公路路灯高压专变 (Sheet 用电详情财务账单),Year 2024 blended price,0.7722,,CNY/kWh,
+2 Actual billed electricity — Street 精品公路路灯高压专变 (Sheet 用电详情财务账单),Year 2025 energy,385723,,kWh,
+2 Actual billed electricity — Street 精品公路路灯高压专变 (Sheet 用电详情财务账单),Year 2025 cost,279201.84,,CNY,
+2 Actual billed electricity — Street 精品公路路灯高压专变 (Sheet 用电详情财务账单),Year 2025 blended price,0.7238,,CNY/kWh,
+2 Actual billed electricity — Combined tunnels + street (subtotal row),Year 2024 total cost,711803.14,,CNY,424350.52 + 287452.62
+2 Actual billed electricity — Combined tunnels + street (subtotal row),Year 2025 total cost,691945.95,,CNY,412744.11 + 279201.84
+2 Actual billed electricity — Invoice YoY comparison (2025 vs 2024),Combined annual energy 2024,925212,,kWh,552953 + 372259 (tunnels + street)
+2 Actual billed electricity — Invoice YoY comparison (2025 vs 2024),Combined annual energy 2025,959169,,kWh,573446 + 385723 (tunnels + street)
+2 Actual billed electricity — Invoice YoY comparison (2025 vs 2024),Energy change YoY,,0.037,,Approx +3.7% overall (959169 vs 925212)
+2 Actual billed electricity — Invoice YoY comparison (2025 vs 2024),Total cost change YoY,,-0.028,,Approx -2.8% (691945.95 vs 711803.14); blended prices dropped
+3 YoY growth by site (Sheet 数据分析),上岙岭隧道 2024 energy / cost,222109,169227.28,kWh / CNY,
+3 YoY growth by site (Sheet 数据分析),上岙岭隧道 2025 energy / cost,230862,165125.91,kWh / CNY,
+3 YoY growth by site (Sheet 数据分析),上岙岭隧道 kWh YoY,,0.0394085786708327,,~+3.94%
+3 YoY growth by site (Sheet 数据分析),上岙岭隧道 cost YoY,,-0.02423586788134846,,~-2.42%
+3 YoY growth by site (Sheet 数据分析),光明隧道李山隧道 2024 energy / cost,330844,255123.24,kWh / CNY,
+3 YoY growth by site (Sheet 数据分析),光明隧道李山隧道 2025 energy / cost,342584,247618.2,kWh / CNY,
+3 YoY growth by site (Sheet 数据分析),光明隧道李山隧道 kWh YoY,,0.0354850019948978,,~+3.55%
+3 YoY growth by site (Sheet 数据分析),光明隧道李山隧道 cost YoY,,-0.02941731219782251,,~-2.94%
+3 YoY growth by site (Sheet 数据分析),精品公路路灯 2024 energy / cost,372259,287452.62,kWh / CNY,
+3 YoY growth by site (Sheet 数据分析),精品公路路灯 2025 energy / cost,385723,279201.84,kWh / CNY,
+3 YoY growth by site (Sheet 数据分析),精品公路路灯 kWh YoY,,0.0361683666479522,,~+3.62%
+3 YoY growth by site (Sheet 数据分析),精品公路路灯 cost YoY,,-0.028703095487527364,,~-2.87%
+3 YoY growth by site (Sheet 数据分析),Workbook baseline row annual cost,691945.95,,CNY/year,
+3 YoY growth by site (Sheet 数据分析),Workbook baseline row average unit price,0.7206313073967991,,CNY/kWh,
+3 YoY growth by site (Sheet 数据分析),Workbook baseline average kWh growth across three series,0.0370206491045609,,,~3.70%/year
+4 Theoretical before vs after retrofit (Sheet 汇总表),Theoretical annual energy before retrofit,1244796,,kWh,
+4 Theoretical before vs after retrofit (Sheet 汇总表),Theoretical annual bill before @ 0.72 CNY/kWh,896253.12,,CNY,
+4 Theoretical before vs after retrofit (Sheet 汇总表),Meter annual energy (cell in same block),959169,,kWh,
+4 Theoretical before vs after retrofit (Sheet 汇总表),Actual annual electricity cost (aligned with 2025 bills),691945.95,,CNY,
+4 Theoretical before vs after retrofit (Sheet 汇总表),After retrofit — scenario A annual energy (replacement wattages only),946430.4,,kWh,40/80/100/200/120 W rows
+4 Theoretical before vs after retrofit (Sheet 汇总表),After retrofit — scenario A bill @ 0.72 (derived),681430.03,,CNY,946430.4 * 0.72
+4 Theoretical before vs after retrofit (Sheet 汇总表),After retrofit — scenario B annual energy (替换功率 dimmed column),671716.8,,kWh,
+4 Theoretical before vs after retrofit (Sheet 汇总表),After retrofit — scenario B theoretical annual bill @ 0.72,483636.096,,CNY,
+4 Theoretical before vs after retrofit (Sheet 汇总表),Energy saving rate vs 1244796 → 946430.4,0.239690358902182,,,~23.97% (~24%)
+4 Theoretical before vs after retrofit (Sheet 汇总表),Energy saving rate vs 1244796 → 671716.8,0.4603800140745953,,,~46.04% (~46%)
+4 Theoretical before vs after retrofit (Sheet 汇总表),Cost saving vs 896253.12 → 483636.096 (fixed 0.72),0.4603800140745953,,,Same ratio as lower-kWh scenario at 0.72
+4 Theoretical before vs after retrofit (Sheet 汇总表),Total replacement cost (last column sum in block),941330,,,Currency as in file; treat as CNY unless confirmed
+4 Theoretical before vs after retrofit (Sheet 汇总表),Unlabeled dense-column calc cells (interpret with care),112.6;141.5;117.6;0.20323129251700686;2.4330463669665217,,,"Possible payback/ratio outputs; confirm headers in source Excel"
+5 Reconciliation vs narrative Word deck (~1.245M / 0.672M / 46%),XLS ~46% ties to theoretical bill 896253 → 483636 CNY and 671717 kWh scenario,,,,"Not the simple ratio 1.245M vs 0.672M kWh from narrative deck alone"
+5 Reconciliation vs narrative Word deck (~1.245M / 0.672M / 46%),Stakeholder baselines — billed 2025,,959169,kWh / ~692k CNY,
+5 Reconciliation vs narrative Word deck (~1.245M / 0.672M / 46%),Stakeholder baselines — theoretical pre-retrofit,,1244796,kWh / ~896253 CNY @ 0.72,

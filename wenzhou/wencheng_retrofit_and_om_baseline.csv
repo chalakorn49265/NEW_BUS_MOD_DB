@@ -1,0 +1,35 @@
+record_type,row_id,luminaire_type_zh,luminaire_type_en,power_w,qty_units,hours_per_year,annual_kwh_theoretical,delta_power_w,annual_kwh_saved_line,tariff_cny_per_kwh,annual_fee_cny,unit_capex_cny,line_capex_cny,ratio_name,ratio_value,currency,om_component_zh,om_cny_per_lamp_year,om_annual_total_cny,notes
+meta,meta_01,文成隧道路灯改造测算,,,,,,,,,,,,,,CNY,,,,source=user spreadsheet screenshot (retrofit table); theoretical_fee_tariff=0.72 CNY/kWh; street_lamps=532 here (differs from earlier survey XLS 632); reconciliations flagged where line sums != footer totals.
+retrofit_before,before_01,专用公路LED隧道灯,LED tunnel (highway special),90,654,8760,515652,,,,,,,,,CNY,,,,
+retrofit_before,before_02,专用公路LED隧道灯,LED tunnel (highway special),100,182,8760,159432,,,,,,,,,CNY,,,,
+retrofit_before,before_03,专用公路LED隧道灯,LED tunnel (highway special),150,282,8760,370548,,,,,,,,,CNY,,,,
+retrofit_before,before_04,专用公路LED隧道灯,LED tunnel (highway special),250,26,8760,56940,,,,,,,,,CNY,,,,
+retrofit_before,before_05,LED路灯,LED street,150,532,4380,415221,,,,,,,,,CNY,,,,
+aggregate,agg_before_kwh_sum_lines,,,,,,,,,,,,,sum_of_line_items_before_kwh,1517793,CNY,,,,
+aggregate,agg_before_kwh_footer,,,,,,,,,,,,,stated_footer_before_kwh,1244798,CNY,,,,
+aggregate,agg_before_kwh_reconcile_note,,,,,,,,,,,,,line_minus_footer_kwh_delta,272995,CNY,,,,reconcile_required: sum_of_line_items_kWh (1517793) != stated_footer (1244798)
+retrofit_after,after_01,LED隧道灯,LED tunnel,40,654,8760,194122,,,,,,,,,CNY,,,,
+retrofit_after,after_02,LED隧道灯,LED tunnel,50,182,8760,132596,,,,,,,,,CNY,,,,
+retrofit_after,after_03,LED隧道灯,LED tunnel,100,282,8760,247032,,,,,,,,,CNY,,,,
+retrofit_after,after_04,LED隧道灯,LED tunnel,200,26,8760,45552,,,,,,,,,CNY,,,,
+retrofit_after,after_05,LED路灯,LED street,120,532,4380,332179,,,,,,,,,CNY,,,,
+aggregate,agg_after_kwh_sum_lines,,,,,,,,,,,,,sum_of_line_items_after_kwh,951481,CNY,,,,
+aggregate,agg_after_kwh_footer,,,,,,,,,,,,,stated_footer_after_kwh,948430,CNY,,,,
+aggregate,agg_after_kwh_reconcile_note,,,,,,,,,,,,,line_minus_footer_kwh_delta,3051,CNY,,,,reconcile_required: sum_of_line_items_kWh (951481) != stated_footer (948430)
+savings_line,save_01,,,,654,8760,,50,145591.2,0.72,104825.664,425,235450,,,CNY,,,,
+savings_line,save_02,,,,182,8760,,50,79716.0,0.72,57395.52,425,77350,,,CNY,,,,
+savings_line,save_03,,,,282,8760,,80,197625.6,0.72,142290.432,580,163560,,,CNY,,,,
+savings_line,save_04,,,,26,8760,,120,27331.2,0.72,19678.464,625,16250,,,CNY,,,,
+savings_line,save_05,,,,532,4380,,60,221452.8,0.72,159446.016,710,448720,,,CNY,,,,
+aggregate,agg_savings_kwh_total,,,,,,,,671716.8,,,,,stated_total_annual_kwh_saved_lines_sum,671716.8,CNY,,,,
+aggregate,agg_savings_fee_total,,,,,,,,,,483636.096,,,stated_total_annual_fee_saved_cny,483636.096,CNY,,,,
+aggregate,agg_capex_total,,,,,,,,,,,,941330,stated_total_retrofit_capex_cny,941330,CNY,,,,
+aggregate,agg_ratio_kwh_saved_footer_totals,,,,,,,,,,,,,delta_kWh_using_stated_before_after_totals,0.23808521543254407,CNY,,,,(1244798-948430)/1244798
+aggregate,agg_ratio_fee_saved_vs_theoretical_before_fee,,,,,,,,,,,,,fee_savings_vs_before_kWh_times_tariff,0.46038088107468034,CNY,,,,matches ~46pct narrative when baseline fee = footer_before_kWh * 0.72
+aggregate,agg_ratio_energy_saved_lines_vs_before_footer,,,,,,,,,,,,,annual_kWh_saved_sum_lines_div_before_kWh_footer,0.5396191189253197,CNY,,,,
+om_assumption,om_benchmark_rate,,,,,,,,,,,,,baseline_yuan_per_lamp_year_municipal_benchmark,120,CNY,,,,市政项目惯例口径，非本项目发票；用于测算基准
+om_assumption,om_lamp_count,,,,,,,,,,,,,total_lamps_assumed_same_as_retrofit_count,1676,CNY,,,,
+om_assumption,om_annual_total,,,,,,,,,,,,,annual_om_cost_cny_total,201120,CNY,,,,1676 * 120 = 201120; total baseline annual O&M
+om_assumption,om_split_人工巡检,,,,,,,,,,,,,,,CNY,人工巡检,40,,示例分摊：人工巡检40 + 维修50 + 备件30 = 120 元/盏·年（占位分解，非发票明细）
+om_assumption,om_split_维修,,,,,,,,,,,,,,,CNY,维修,50,,示例分摊：人工巡检40 + 维修50 + 备件30 = 120 元/盏·年（占位分解，非发票明细）
+om_assumption,om_split_备件,,,,,,,,,,,,,,,CNY,备件,30,,示例分摊：人工巡检40 + 维修50 + 备件30 = 120 元/盏·年（占位分解，非发票明细）
