@@ -101,6 +101,18 @@ def get_default_tariff(df: pd.DataFrame) -> float:
     return float(sl.iloc[0]["tariff_cny_per_kwh"])
 
 
+def get_default_om_annual_cny(df: pd.DataFrame) -> float:
+    """CSV `om_annual_total`：年度运维总成本（元/年），作滑块默认。"""
+    try:
+        r = row_by_id(df, "om_annual_total")
+        v = _safe_float(r.get("ratio_value"))
+        if np.isfinite(v) and v >= 0:
+            return float(v)
+    except KeyError:
+        pass
+    return 201_120.0
+
+
 def get_kwh_before_footer(df: pd.DataFrame) -> float:
     return _safe_float(row_by_id(df, "agg_before_kwh_footer").get("ratio_value"))
 
@@ -133,21 +145,36 @@ def irr_annual(cashflows: list[float]) -> float | None:
 
 def compute_cashflow_table(
     investment: float,
-    annual_benefit: float,
+    annual_client_share_gross: float,
+    annual_om_cny: float,
     horizon_years: int,
     *,
     money_round: int = 6,
 ) -> pd.DataFrame:
-    """money_round：内部累计保留小数位，便于与「节费」等三位小数展示对齐。"""
+    """第 0 年仅投资；第 1 年起：净流 = 客户节费分成（毛）− 年运维费。money_round 与节费展示对齐。"""
     rows: list[dict[str, float]] = []
     cum = 0.0
+    g = float(annual_client_share_gross)
+    om = float(annual_om_cny)
     for year in range(0, horizon_years + 1):
         if year == 0:
+            gross = 0.0
+            om_y = 0.0
             net = round(-float(investment), money_round)
         else:
-            net = round(float(annual_benefit), money_round)
+            gross = round(g, money_round)
+            om_y = round(om, money_round)
+            net = round(gross - om_y, money_round)
         cum = round(cum + net, money_round)
-        rows.append({"年份": year, "当年净现金流（元）": net, "累计净现金流（元）": cum})
+        rows.append(
+            {
+                "年份": year,
+                "客户节费分成（元）": gross,
+                "运维费用（元）": om_y,
+                "当年净现金流（元）": net,
+                "累计净现金流（元）": cum,
+            }
+        )
     return pd.DataFrame(rows)
 
 
@@ -203,8 +230,8 @@ def main() -> None:
     st.markdown(
         f"<h2 style='color:{NAVY};margin-bottom:0.2rem;'>文成隧道路灯改造 · 客户侧经济性</h2>"
         f"<p style='color:{MUTED};margin-top:0;'>测算改造投资、回收期与现金流（简化：年末入账、未折现）。"
-        f" 从第 1 年起，客户现金流入 = <strong>年度节费</strong>（节省下来的电费）× <strong>客户分成</strong>；"
-        f"其余节费归<strong>业主</strong>。左侧滑块调节该比例。</p>",
+        f" 从第 1 年起，客户现金<strong>毛收入</strong> = 年度节费 × 客户分成；再扣除<strong>年运维费</strong>得到客户<strong>净现金流</strong>（回收期、IRR、明细表同口径）。"
+        f" 其余节费归<strong>业主</strong>。</p>",
         unsafe_allow_html=True,
     )
 
@@ -224,6 +251,7 @@ def main() -> None:
     fee_save_default = get_annual_fee_saving(df)
     kwh_saved_default = get_kwh_saved(df)
     tariff_default = get_default_tariff(df)
+    om_default_cny = get_default_om_annual_cny(df)
 
     with st.sidebar:
         st.subheader("情景假设")
@@ -259,6 +287,19 @@ def main() -> None:
             value=0.0,
             step=1000.0,
             help="CSV 未包含的安装费等，计入客户总投资。",
+        )
+        om_annual_cny = float(
+            st.slider(
+                "年运维费用（元）",
+                min_value=0,
+                max_value=2_000_000,
+                value=int(round(min(max(0.0, om_default_cny), 2_000_000))),
+                step=1000,
+                help=(
+                    "自第 1 年起每年从客户节费分成中扣除；默认来自 CSV `om_annual_total`（市政基准×盏数）。"
+                    "IRR、回收期与下方现金流明细均按「分成 − 运维」净额计算。"
+                ),
+            )
         )
 
         st.divider()
@@ -296,9 +337,10 @@ def main() -> None:
     benefit_share = benefit_share_pct / 100.0
 
     client_investment = round(float(total_capex_default) * capex_share + float(extra_cost), 6)
-    # 客户现金流 = 年度节费 × 客户分成（节费需分一部分给业主）
+    # 业主分得节费份额；客户侧：毛分成 − 年运维 = 净现金流（驱动 IRR / 明细表）
     owner_annual_savings_share = round(float(annual_shouru) * (1.0 - benefit_share), 6)
-    client_annual_cashflow_in = round(float(annual_shouru) * benefit_share, 6)
+    client_share_gross = round(float(annual_shouru) * benefit_share, 6)
+    client_annual_net = round(float(client_share_gross) - float(om_annual_cny), 6)
 
     if (not np.isfinite(annual_shouru)) or annual_shouru <= 0:
         st.warning(
@@ -324,7 +366,7 @@ def main() -> None:
 - **改造后电费（分项口径）**：收资表「改造后电费」列 = **节电量合计 × λ**（例 **483,636.096** 元/年）——**不是**表尾「改造后年用电量×λ」。  
 - **年节费（少付、现金流基数）** = 改造前年电费 **−** 上一项 = **表尾改造后年用电量 × λ**（例 **412,618.464** 元/年）。  
 
-**现金流** = **年节费** × **客户分成**。调节 λ 时，第 2、3 行与节费联动；CSV 分项「年节电费」列仅在 λ 与文件一致时可与第 2 行逐字核对。  
+**现金流（客户侧）** = **年节费** × **客户分成** − **年运维费**（侧栏滑块）。调节 λ 时，第 2、3 行与节费联动。  
 """
     )
     fee_compare_tbl = pd.DataFrame(
@@ -378,33 +420,50 @@ def main() -> None:
         f"λ = **{tariff:.2f}** 元/kWh；第 1、3 行电量为 **表尾**；第 2 行为 **分项节电量合计**。"
         " 现金流基数为 **节费**（第 3 行）。"
     )
-    sp1, sp2, sp3 = st.columns(3)
+    sp1, sp2, sp3, sp4, sp5 = st.columns(5)
     sp1.metric(
         "节费总额（可分配，元/年）",
         f"{annual_shouru:,.3f}" if np.isfinite(annual_shouru) else "—",
         help="改造前年电费 −（分项节电量合计×λ）；等于表尾改造后电量×λ；客户与业主从该池分成。",
     )
     sp2.metric(
-        f"其中 — 客户（{benefit_share_pct}%）",
-        f"{client_annual_cashflow_in:,.3f}" if np.isfinite(client_annual_cashflow_in) else "—",
-        help="计入下方现金流、回收期与 IRR。",
+        f"客户分成—毛（{benefit_share_pct}%）",
+        f"{client_share_gross:,.3f}" if np.isfinite(client_share_gross) else "—",
+        help="节费 × 客户比例；扣运维前。",
     )
     sp3.metric(
-        f"其中 — 业主（{100 - benefit_share_pct}%）",
+        "年运维费用（元/年）",
+        f"{om_annual_cny:,.0f}",
+        help="侧栏滑块；默认来自 CSV `om_annual_total`。",
+    )
+    sp4.metric(
+        "客户净现金流（元/年）",
+        f"{client_annual_net:,.3f}" if np.isfinite(client_annual_net) else "—",
+        help="客户分成（毛）− 年运维费；驱动回收期、IRR 与下方明细表。",
+    )
+    sp5.metric(
+        f"业主（{100 - benefit_share_pct}%）",
         f"{owner_annual_savings_share:,.3f}" if np.isfinite(owner_annual_savings_share) else "—",
-        help="节费中归业主的部分（并列展示，不计入客户现金流表）。",
+        help="节费中归业主的部分（不计入客户现金流表；运维仅扣客户侧）。",
     )
 
-    simple_payback = fractional_payback_years(client_investment, client_annual_cashflow_in)
+    if np.isfinite(client_annual_net) and client_annual_net <= 0:
+        st.warning(
+            "**客户年净现金流 ≤ 0**（节费分成不足以覆盖运维或运维过高）；回收期与 IRR 可能无解或无经济意义。"
+        )
+
+    simple_payback = fractional_payback_years(client_investment, client_annual_net)
     cumulative_net = round(
-        -float(client_investment) + float(client_annual_cashflow_in) * float(horizon), 6
+        -float(client_investment) + float(client_annual_net) * float(horizon), 6
     )
     simple_roi = (cumulative_net / client_investment) if client_investment > 0 else float("nan")
 
-    flows = [-client_investment] + [client_annual_cashflow_in] * int(horizon)
+    flows = [-client_investment] + [client_annual_net] * int(horizon)
     irr_val = irr_annual(flows)
 
-    cash_df = compute_cashflow_table(client_investment, client_annual_cashflow_in, int(horizon))
+    cash_df = compute_cashflow_table(
+        client_investment, client_share_gross, om_annual_cny, int(horizon)
+    )
     payback_year_int = first_integer_year_payback(cash_df)
 
     # --- KPI 指标条 ---
@@ -415,19 +474,19 @@ def main() -> None:
         help="改造总投资 × 客户承担比例 + 额外一次性支出",
     )
     c2.metric(
-        "年均现金流收入—归属客户（元/年）",
-        f"{client_annual_cashflow_in:,.3f}",
-        help="年度节费 × 客户分成比例；与左侧滑块一致；计入现金流表。",
+        "年均净现金流—归属客户（元/年）",
+        f"{client_annual_net:,.3f}",
+        help="节费×客户分成 − 年运维费；与现金流明细表「当年净现金流」一致。",
     )
     c3.metric(
         "简单回收期（年）",
         "—" if simple_payback is None else f"{simple_payback:.2f}",
-        help="客户总投资 ÷ 年均现金流收入（未折现）",
+        help="客户总投资 ÷ 年均净现金流（未折现）",
     )
     c4.metric(
         f"分析期（{int(horizon)}年）累计净收益（元）",
         f"{cumulative_net:,.3f}",
-        help="− 总投资 + 年均现金流收入 × 年数（简化）",
+        help="− 总投资 + 年均净现金流 × 年数（简化）",
     )
     c5.metric(
         f"分析期简单收益率",
@@ -437,7 +496,7 @@ def main() -> None:
     c6.metric(
         "年化 IRR",
         "—" if irr_val is None else f"{irr_val * 100:.2f}%",
-        help="年度现金流（每年一期）下的 IRR，即年化贴现率；numpy-financial.irr；无解时显示 —",
+        help="基于「净现金流」序列（已扣年运维）；numpy-financial.irr；无解时显示 —",
     )
 
     if irr_val is not None and np.isfinite(irr_val):
@@ -448,13 +507,14 @@ def main() -> None:
             f"<div style='font-size:2.35rem;font-weight:700;color:{ACCENT};line-height:1.15;"
             f"font-variant-numeric:tabular-nums;'>{irr_val * 100:.2f}%</div>"
             f"<div style='font-size:0.78rem;color:{MUTED};margin-top:6px;'>"
-            f"基于上方年度现金流序列（第 0 年投资，随后 {int(horizon)} 年等额流入）</div></div>",
+            f"基于上方年度现金流序列（第 0 年投资，随后 {int(horizon)} 年等额<strong>净</strong>流入，已扣运维）</div></div>",
             unsafe_allow_html=True,
         )
 
     if np.isfinite(kwh_before) and np.isfinite(original_annual_fee) and np.isfinite(bill_post_lines_cny):
         st.caption(
-            f"客户现金流：**{annual_shouru:,.3f}** × **{benefit_share_pct}%** = **{client_annual_cashflow_in:,.3f}** 元/年；"
+            f"客户分成（毛）：**{annual_shouru:,.3f}** × **{benefit_share_pct}%** = **{client_share_gross:,.3f}** 元/年；"
+            f" 扣运维 **{om_annual_cny:,.0f}** → 净 **{client_annual_net:,.3f}** 元/年；"
             f" 业主：**{owner_annual_savings_share:,.3f}** 元/年。"
             f" 分项「改造后电费」合计：**{bill_post_lines_cny:,.3f}** 元/年；"
             f" 年节费（表尾）：**{annual_fee_after_retrofit_footer:,.3f}** 元/年。"
@@ -507,11 +567,16 @@ def main() -> None:
     st.plotly_chart(fig, use_container_width=True)
 
     with st.expander("查看现金流明细表（与上图一致）", expanded=False):
+        st.caption(
+            "第 1 年起：**当年净现金流** = **客户节费分成** − **运维费用**；第 0 年仅为客户承担的投资支出（负值）。"
+        )
         st.dataframe(
             cash_df,
             use_container_width=True,
             column_config={
                 "年份": st.column_config.NumberColumn("年份", format="%d"),
+                "客户节费分成（元）": st.column_config.NumberColumn(format="%.3f"),
+                "运维费用（元）": st.column_config.NumberColumn(format="%.3f"),
                 "当年净现金流（元）": st.column_config.NumberColumn(format="%.3f"),
                 "累计净现金流（元）": st.column_config.NumberColumn(format="%.3f"),
             },
@@ -532,11 +597,15 @@ def main() -> None:
 
 - **`agg_savings_fee_total`（CSV）** = **{fee_save_default:,.3f}** 元/年 = `footer_after_kWh` × λ（**节费**，非分项「改造后电费」）  
 
-- **年均现金流收入—归属客户** = 节费 **{annual_shouru:,.3f}** × **{benefit_share_pct}%** → **{client_annual_cashflow_in:,.3f}** 元/年；**业主节费份额** = **{owner_annual_savings_share:,.3f}** 元/年  
+- **客户节费分成（毛）** = 节费 **{annual_shouru:,.3f}** × **{benefit_share_pct}%** → **{client_share_gross:,.3f}** 元/年；**业主节费份额** = **{owner_annual_savings_share:,.3f}** 元/年  
 
-- **简单回收期** = 客户承担投资额 ÷ 年均现金流收入（归属客户）
+- **年运维费用** = **{om_annual_cny:,.0f}** 元/年（侧栏滑块；默认源于 CSV `om_annual_total` ≈ **{om_default_cny:,.0f}**）  
 
-- **分析期累计净收益** = −客户承担投资额 + 年均现金流收入（归属客户） × **{int(horizon)}**
+- **客户年均净现金流** = **{client_share_gross:,.3f}** − **{om_annual_cny:,.0f}** = **{client_annual_net:,.3f}** 元/年（驱动 IRR、回收期与明细表）  
+
+- **简单回收期** = 客户承担投资额 ÷ 年均净现金流（归属客户）
+
+- **分析期累计净收益** = −客户承担投资额 + 年均净现金流 × **{int(horizon)}**
 
 - **分析期简单收益率** = 累计净收益 ÷ 客户承担投资额  
 
@@ -594,6 +663,10 @@ def main() -> None:
             st.info("无运维假设记录。")
         else:
             st.dataframe(zh_rename_detail(om), use_container_width=True)
+            st.caption(
+                f"侧栏 **年运维费用** 默认 **{om_default_cny:,.0f}** 元/年（与 `om_annual_total` 一致），"
+                "可在现金流中调节；明细表中每年扣除该运维额。"
+            )
 
     st.divider()
     st.caption(
