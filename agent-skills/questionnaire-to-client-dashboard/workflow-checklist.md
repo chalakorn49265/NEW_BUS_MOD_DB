@@ -20,6 +20,11 @@
 ## 4. Scaffold
 
 - [ ] New or forked Streamlit page: **defaults from survey**; **`st.sidebar`** for tariffs, horizons, fee splits, scenarios.
+- [ ] **KPI strip** (`st.metric`): investment / annual cash-in / payback / horizon net or IRR as applicable ([`dashboard-patterns.md`](dashboard-patterns.md) MVED).
+- [ ] **Plotly cumulative cashflow** + horizontal zero line + payback marker; **annual cashflow table** (expander ok).
+- [ ] **CAPEX vs OPEX**: at least one chart (stack / pie / waterfall) **and** a line-item **table**.
+- [ ] **Comparison table**: before/after bill or baseline vs scenario.
+- [ ] Optional: ingest JSON via **`scripts/read_questionnaire_input.py`** when flattening XLSX for agents.
 - [ ] Optional: persist **`project_capex_pack`** or project CSV (wenzhou-style) per **`docs/MODEL_INPUTS_DASHBOARD_MINIMUM.md`** / schema.
 
 ## 5. Validate
@@ -27,7 +32,9 @@
 - [ ] **B1** vs **B2+B3+B4** per Definitions in acquisition doc.
 - [ ] **C4** consistent with **C4a–C4e** if TOU is used.
 - [ ] Flag upstream **`reconcile_required`** or similar if present in loaded CSV/model output.
+- [ ] **Visual QA**: with a **filled sample** workbook or CSV, confirm charts show **non-empty** series (no blank Plotly axes due to NaN-only data).
 
 ## 6. Ship
 
 - [ ] Document run command (`streamlit run …`) and which root entrypoint matches the story (`streamlit_app.py` vs `streamlit_viewer_app.py`).
+- [ ] Confirm MVED checklist satisfied — not sidebar-only.

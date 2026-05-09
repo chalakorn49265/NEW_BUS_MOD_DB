@@ -4,8 +4,8 @@ Portable skill pack: teach agents to turn **`questionnaire_01_input.xlsx`** answ
 
 ## Contents
 
-- **`SKILL.md`** — Main agent instructions (YAML frontmatter for Cursor).
-- **`fixed-vs-flexible.md`**, **`survey-routing.md`**, **`dashboard-patterns.md`**, **`workflow-checklist.md`**, **`reference-implementation.md`**.
+- **`SKILL.md`** — Main agent instructions (YAML frontmatter for Cursor), including **minimum charts/KPIs** for client economics.
+- **`fixed-vs-flexible.md`**, **`survey-routing.md`**, **`dashboard-patterns.md`** (MVED: cumulative cashflow, CAPEX/OPEX, tables), **`streamlit-inventory.md`** (repo-wide chart/table/KPI map), **`workflow-checklist.md`**, **`reference-implementation.md`**.
 
 ## Use as a standalone GitHub repo
 
