@@ -8,6 +8,8 @@ For distribution to sales teams or sheet builders who only need **CAPEX triplet 
 
 - **[`MODEL_INPUTS_DASHBOARD_MINIMUM.md`](MODEL_INPUTS_DASHBOARD_MINIMUM.md)** — human-readable checklist with keys, labels, units, and JSON mapping notes.
 - **[`csv/model_inputs_dashboard_minimum.csv`](csv/model_inputs_dashboard_minimum.csv)** — wide CSV template (header row = flattened JSON paths; second row = illustrative example). Import into Google Sheets or Feishu Base and align column names to those headers when generating `project_capex_pack` JSON.
+- **Feishu Form (short list)** — [`../questionnaire/feishu_form_simple.xlsx`](../questionnaire/feishu_form_simple.xlsx) and [`../questionnaire/feishu_form_simple.csv`](../questionnaire/feishu_form_simple.csv): ~21 fields, Chinese labels + suggested 题型/选项, for copy into the form designer or Bitable import; see sheet **使用说明** in the xlsx. Regenerate from [`../questionnaire/build_feishu_form_simple.py`](../questionnaire/build_feishu_form_simple.py) if you change the field set.
+- **Excel quick capture (CN + EN + validation)** — [`../questionnaire/questionnaire_01_input.xlsx`](../questionnaire/questionnaire_01_input.xlsx): sheets **填写** and **English** share the same `#` list, driven by [`../questionnaire/questionnaire_input_row_ids.txt`](../questionnaire/questionnaire_input_row_ids.txt) (optional subset). Answer cells use list / numeric / date validation per question type; hidden **Lists** / **Lists_EN**. See [`GENERALIZED_MODEL_DATA_ACQUISITION.md`](GENERALIZED_MODEL_DATA_ACQUISITION.md). Regenerate from [`../questionnaire/build_questionnaire_input_xlsx.py`](../questionnaire/build_questionnaire_input_xlsx.py) after changing the master workbook, ZH map, or row-id file.
 
 ## Principles
 

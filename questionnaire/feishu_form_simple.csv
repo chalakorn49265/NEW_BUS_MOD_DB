@@ -1,0 +1,22 @@
+﻿order,type_zh,title_zh,title_en,hint,required,options,json_path
+1,单行文本,项目编号,Project ID,内部机会/项目代码,Y,,identity.project_id
+2,单行文本,客户名称,Client name,客户法定或常用名称,Y,,identity.client_name
+3,单行文本,国家/地区,Country,如：中国 / Mozambique,Y,,identity.country
+4,单行文本,币种（ISO）,Currency (ISO 4217),全部金额统一币种，如 CNY、USD、MZN,Y,,capex_triplet.currency
+5,单行文本,基准年度/期间,Baseline period,如：FY2024、自然年2024,N,,baseline_period
+6,日期,填写日期,Submission date,拜访或提交当日,Y,,identity.submitted_at
+7,单行文本,填写人,Submitted by,姓名 + 角色,N,,identity.submitted_by
+8,单选题,项目类型,Project type,,Y,新建|改造|扩建|纯运维升级,project_type
+9,数字,灯具数量（盏）,Number of lights,计划改造或存量相关盏数,Y,,scale.number_of_lights
+10,数字,现状年电费（本币/年）,Annual electricity cost,基准期内可归因于道路照明的电费,N,,→ baseline electricity
+11,数字,现状年运维费（本币/年）,Annual O&M cost,人工+材料+外包运维等,N,,→ baseline opex
+12,数字,设备更新/采购预算（本币/年）,Capex / replacement budget,设备类资本性更新，若单独列账,N,,→ baseline capex budget
+13,数字,年总支出（如仅知一项可只填此）,Total annual lighting spend,若只掌握总包数字，可只填此项,N,,→ B1 total
+14,数字,年用电量（kWh，如可知）,Annual kWh,近一年或基准年,N,,energy_baseline_kwh
+15,数字,每晚开灯小时数,Hours on per night,可写平均；有季节差异请备注,N,,operating_hours_night
+16,单选题,是否已有调光/控制,Dimming / control,,N,无|是|部分,existing_control
+17,多行文本,现状灯型与占比,Incumbent fixture mix,如：高压钠 60% + 普通 LED 40%,N,,fixture_mix
+18,单选题,可接受合同年限,Acceptable term (years),选最接近的一档,N,≤3年|4–7年|8–12年|12年以上|未决,commercial_laas.term_years
+19,单选题,资产是否必须归客户,Asset ownership must be client,,N,是|否|未决,ownership_preference
+20,多行文本,付款/审批主体,Paying & approval entity,如：财政/城管/路灯所/其他,N,,payer_entity
+21,多行文本,其他必要说明,Other notes,与金额口径、拆表、范围边界相关,N,,notes
