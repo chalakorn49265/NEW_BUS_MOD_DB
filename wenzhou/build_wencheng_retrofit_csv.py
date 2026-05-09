@@ -58,9 +58,11 @@ def main() -> None:
             luminaire_type_zh="文成隧道路灯改造测算",
             currency="CNY",
             notes=(
-                "source=user spreadsheet screenshot (retrofit table); theoretical_fee_tariff=0.72 CNY/kWh; "
-                "street_lamps=532 here (differs from earlier survey XLS 632); reconciliations flagged where "
-                "line sums != footer totals."
+                "source=user spreadsheet; tariff=0.72 CNY/kWh; "
+                "annual_kWh_saved lines match savings block screenshot (sum 671716.8 kWh/yr); "
+                "retrofit_after kWh = same-row before_kWh minus saved_kWh; "
+                "stated_footer_after_kWh = footer_before_kWh - sum(saved_kWh); "
+                "reconcile when line-sum before != footer before (same as agg_before)."
             ),
         )
     )
@@ -130,13 +132,23 @@ def main() -> None:
         )
     )
 
-    after_lines = [
-        ("after_01", "LED隧道灯", "LED tunnel", 40, 654, 8760, 194122),
-        ("after_02", "LED隧道灯", "LED tunnel", 50, 182, 8760, 132596),
-        ("after_03", "LED隧道灯", "LED tunnel", 100, 282, 8760, 247032),
-        ("after_04", "LED隧道灯", "LED tunnel", 200, 26, 8760, 45552),
-        ("after_05", "LED路灯", "LED street", 120, 532, 4380, 332179),
+    # 节电量（kWh/年）：收资表「节能量块」分项（表头可能写作年理论电量，实为逐年节电量）；与 savings_line 一致。
+    saved_kwh_by_row = [145591.2, 79716.0, 197625.6, 27331.2, 221452.8]
+    total_saved_kwh = float(sum(saved_kwh_by_row))
+
+    after_specs = [
+        ("after_01", "LED隧道灯", "LED tunnel", 40, 654, 8760),
+        ("after_02", "LED隧道灯", "LED tunnel", 50, 182, 8760),
+        ("after_03", "LED隧道灯", "LED tunnel", 100, 282, 8760),
+        ("after_04", "LED隧道灯", "LED tunnel", 200, 26, 8760),
+        ("after_05", "LED路灯", "LED street", 120, 532, 4380),
     ]
+    after_lines: list[tuple[str, str, str, int, int, int, float]] = []
+    for i, (aid, zht, ent, pw, q, h) in enumerate(after_specs):
+        ak_before_row = float(before_lines[i][-1])
+        ak_after = ak_before_row - saved_kwh_by_row[i]
+        after_lines.append((aid, zht, ent, pw, q, h, ak_after))
+
     for aid, zht, ent, pw, q, h, ak in after_lines:
         rows.append(
             cells(
@@ -153,7 +165,8 @@ def main() -> None:
         )
 
     sum_after_lines = sum(x[-1] for x in after_lines)
-    footer_after = 948430
+    # 表尾：改造后 = 表尾改造前 − 节电量合计（与分项加总「改造后」可能不一致，当「改造前」表尾≠分项加总时）
+    footer_after = float(footer_before) - total_saved_kwh
 
     rows.append(
         cells(
@@ -195,12 +208,58 @@ def main() -> None:
         )
     )
 
+    lam = 0.72
     savings = [
-        ("save_01", 50, 654, 8760, 145591.2, 104825.664, 425, 235450),
-        ("save_02", 50, 182, 8760, 79716.0, 57395.52, 425, 77350),
-        ("save_03", 80, 282, 8760, 197625.6, 142290.432, 580, 163560),
-        ("save_04", 120, 26, 8760, 27331.2, 19678.464, 625, 16250),
-        ("save_05", 60, 532, 4380, 221452.8, 159446.016, 710, 448720),
+        (
+            "save_01",
+            50,
+            654,
+            8760,
+            saved_kwh_by_row[0],
+            round(saved_kwh_by_row[0] * lam, 6),
+            425,
+            235450,
+        ),
+        (
+            "save_02",
+            50,
+            182,
+            8760,
+            saved_kwh_by_row[1],
+            round(saved_kwh_by_row[1] * lam, 6),
+            425,
+            77350,
+        ),
+        (
+            "save_03",
+            80,
+            282,
+            8760,
+            saved_kwh_by_row[2],
+            round(saved_kwh_by_row[2] * lam, 6),
+            580,
+            163560,
+        ),
+        (
+            "save_04",
+            120,
+            26,
+            8760,
+            saved_kwh_by_row[3],
+            round(saved_kwh_by_row[3] * lam, 6),
+            625,
+            16250,
+        ),
+        (
+            "save_05",
+            60,
+            532,
+            4380,
+            saved_kwh_by_row[4],
+            round(saved_kwh_by_row[4] * lam, 6),
+            710,
+            448720,
+        ),
     ]
     for sid, dpw, q, h, kwhs, fee, uc, lc in savings:
         rows.append(
@@ -211,7 +270,7 @@ def main() -> None:
                 hours_per_year=h,
                 delta_power_w=dpw,
                 annual_kwh_saved_line=kwhs,
-                tariff_cny_per_kwh=0.72,
+                tariff_cny_per_kwh=lam,
                 annual_fee_cny=fee,
                 unit_capex_cny=uc,
                 line_capex_cny=lc,
@@ -219,13 +278,16 @@ def main() -> None:
             )
         )
 
+    total_fee_saved = total_saved_kwh * lam
+    # 表尾「改造后」年应付电费 = 表尾改造后 kWh × λ（与仪表板现金流口径一致，例 412,618.464 @ 0.72）
+    after_annual_fee_footer = round(float(footer_after) * lam, 6)
     rows.append(
         cells(
             record_type="aggregate",
             row_id="agg_savings_kwh_total",
-            annual_kwh_saved_line=671716.8,
+            annual_kwh_saved_line=total_saved_kwh,
             ratio_name="stated_total_annual_kwh_saved_lines_sum",
-            ratio_value=671716.8,
+            ratio_value=total_saved_kwh,
             currency="CNY",
         )
     )
@@ -233,10 +295,16 @@ def main() -> None:
         cells(
             record_type="aggregate",
             row_id="agg_savings_fee_total",
-            annual_fee_cny=483636.096,
-            ratio_name="stated_total_annual_fee_saved_cny",
-            ratio_value=483636.096,
+            annual_fee_cny=after_annual_fee_footer,
+            ratio_name="stated_after_retrofit_annual_fee_cny_footer_times_tariff",
+            ratio_value=after_annual_fee_footer,
             currency="CNY",
+            notes=(
+                "row_id historical name agg_savings_fee_total; value is footer_after_kWh * λ (after-retrofit bill). "
+                "Sum of savings_line annual_fee_cny = "
+                + str(round(total_fee_saved, 6))
+                + " CNY (savings vs before)."
+            ),
         )
     )
     rows.append(
@@ -250,9 +318,10 @@ def main() -> None:
         )
     )
 
-    before_fee_footer = footer_before * 0.72
+    before_fee_footer = float(footer_before) * lam
     ratio_delta_kwh = (footer_before - footer_after) / footer_before
-    ratio_fee_saved_vs_before_fee = (before_fee_footer - 483636.096) / before_fee_footer
+    # 与旧版一致：after_bill / before_bill（约 0.46 = 改造后应付占改造前电费比例）
+    ratio_fee_saved_vs_before_fee = after_annual_fee_footer / before_fee_footer
 
     rows.append(
         cells(
@@ -279,7 +348,7 @@ def main() -> None:
             record_type="aggregate",
             row_id="agg_ratio_energy_saved_lines_vs_before_footer",
             ratio_name="annual_kWh_saved_sum_lines_div_before_kWh_footer",
-            ratio_value=671716.8 / footer_before,
+            ratio_value=total_saved_kwh / footer_before,
             currency="CNY",
         )
     )
